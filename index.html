@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TerraFlow UI - GeoAI Node Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #121212; 
+            color: #e5e5e5;
+            overflow: hidden; 
+            user-select: none;
+        }
+        
+        /* Grid Background */
+        #canvas-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(#1f1f1f 1px, transparent 1px),
+                linear-gradient(90deg, #1f1f1f 1px, transparent 1px);
+            background-size: 20px 20px;
+            z-index: 0;
+            cursor: grab;
+        }
+        #canvas-bg:active { cursor: grabbing; }
+
+        /* SVG Layer for Connections */
+        #connections-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; 
+            z-index: 1;
+            /* Important: Ensure transforms originate from top-left to match nodes */
+            transform-origin: 0 0;
+        }
+
+        /* Node Styles */
+        .node {
+            position: absolute;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 10px;
+            min-width: 240px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+        .node:hover { border-color: #555; }
+        .node.selected { border: 1px solid #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.2); }
+
+        .node-header {
+            background: #2a2a2a;
+            padding: 10px 14px;
+            border-radius: 10px 10px 0 0;
+            font-weight: 600;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #333;
+        }
+        .node-header:active { cursor: grabbing; }
+        
+        .node-body { padding: 12px; font-size: 12px; background: #1e1e1e; border-radius: 0 0 10px 10px; }
+        
+        /* Port Styles */
+        .port {
+            width: 14px; height: 14px;
+            background: #555;
+            border-radius: 50%;
+            position: absolute;
+            cursor: crosshair;
+            transition: all 0.2s;
+            z-index: 10;
+            border: 2px solid #1e1e1e;
+        }
+        .port:hover { background: #fff; transform: scale(1.2); border-color: #3b82f6; }
+        .port.input { left: -7px; background: #64748b; } 
+        .port.output { right: -7px; background: #64748b; } 
+
+        .socket-row {
+            position: relative;
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            height: 24px;
+        }
+        .socket-label { margin: 0 14px; color: #9ca3af; flex: 1; font-weight: 500; font-size: 11px; }
+        .socket-row.input .socket-label { text-align: left; }
+        .socket-row.output .socket-label { text-align: right; }
+
+        /* Connection Lines */
+        path.connection {
+            fill: none;
+            stroke: #555;
+            stroke-width: 3px;
+            cursor: pointer;
+            transition: stroke 0.2s;
+            stroke-linecap: round;
+            /* Keeps line width consistent during zoom */
+            vector-effect: non-scaling-stroke;
+        }
+        path.connection:hover { stroke: #d4d4d8; }
+        path.drag-line {
+            fill: none;
+            stroke: #e5e5e5;
+            stroke-width: 2px;
+            stroke-dasharray: 4;
+            opacity: 0.6;
+            vector-effect: non-scaling-stroke;
+        }
+
+        /* Context Menu */
+        #context-menu {
+            position: absolute;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 6px;
+            width: 200px;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+        }
+        .menu-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #d4d4d8;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-radius: 6px;
+            transition: background 0.1s;
+        }
+        .menu-item:hover { background: #333; color: white; }
+        .menu-category {
+            font-size: 11px;
+            color: #666;
+            padding: 8px 12px 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .menu-separator { height: 1px; background: #333; margin: 4px 0; }
+
+        /* Inputs */
+        .node-input-wrapper { margin-bottom: 10px; }
+        .node-input-label { color: #6b7280; font-size: 10px; margin-bottom: 4px; display: block; font-weight: 500; }
+        .node-input {
+            width: 100%;
+            background: #111;
+            border: 1px solid #333;
+            color: #e5e5e5;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            transition: border-color 0.2s;
+            font-family: monospace;
+        }
+        .node-input:focus { border-color: #6366f1; outline: none; background: #000; }
+        select.node-input { cursor: pointer; }
+
+        /* Floating UI */
+        .floating-ui { position: fixed; z-index: 50; }
+        .badge { display: inline-block; width: 6px; height: 6px; border-radius: 50%; }
+        
+        /* Logo */
+        .logo-text {
+            background: linear-gradient(to right, #60a5fa, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. Canvas Background -->
+    <div id="canvas-bg"></div>
+
+    <!-- 2. SVG Connections Layer -->
+    <svg id="connections-layer">
+        <!-- Dynamic paths -->
+    </svg>
+
+    <!-- 3. Nodes Container -->
+    <div id="nodes-container"></div>
+
+    <!-- 4. Logo & Toolbar -->
+    <div class="floating-ui top-4 left-4 bg-[#1e1e1e]/90 backdrop-blur border border-[#333] rounded-xl p-1.5 shadow-2xl flex gap-1 items-center">
+        <div class="px-3 py-1.5 flex items-center gap-2">
+            <i class="ph-fill ph-planet text-xl text-blue-500"></i>
+            <span class="text-base logo-text">TerraFlow</span>
+        </div>
+        <div class="h-5 w-[1px] bg-[#333] mx-1"></div>
+        <button onclick="clearCanvas()" class="text-xs hover:bg-[#333] text-gray-400 hover:text-white px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+            <i class="ph ph-trash"></i> Clear
+        </button>
+        <button onclick="resetView()" class="text-xs hover:bg-[#333] text-gray-400 hover:text-white px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+            <i class="ph ph-arrows-out"></i> Reset View
+        </button>
+    </div>
+
+    <!-- 5. Export Button -->
+    <div class="floating-ui top-4 right-4">
+        <button onclick="compileAndExport()" class="bg-[#1e1e1e] hover:bg-[#252525] text-white pl-4 pr-5 py-2 rounded-xl border border-[#333] shadow-xl flex items-center gap-3 transition group">
+            <div class="bg-indigo-600 group-hover:bg-indigo-500 rounded-lg p-1.5 transition">
+                <i class="ph-fill ph-play text-white"></i>
+            </div>
+            <div class="flex flex-col items-start leading-none">
+                <span class="text-[10px] text-gray-500 font-medium mb-0.5">TERRATORCH COMPILER</span>
+                <span class="text-xs font-bold text-gray-200">Export Notebook</span>
+            </div>
+        </button>
+    </div>
+
+    <!-- 6. Bottom Helper -->
+    <div class="floating-ui bottom-6 left-1/2 transform -translate-x-1/2 bg-[#1e1e1e]/80 backdrop-blur px-5 py-2.5 rounded-full border border-[#333] text-gray-500 text-xs pointer-events-none flex items-center gap-4 shadow-lg">
+        <span class="flex items-center gap-1.5"><i class="ph-fill ph-mouse-right-click text-gray-400"></i> Add Node</span>
+        <span class="w-[1px] h-3 bg-[#333]"></span>
+        <span class="flex items-center gap-1.5"><i class="ph-fill ph-arrows-out-line text-gray-400"></i> Zoom</span>
+        <span class="w-[1px] h-3 bg-[#333]"></span>
+        <span class="flex items-center gap-1.5"><i class="ph-fill ph-hand-grabbing text-gray-400"></i> Pan</span>
+    </div>
+
+    <!-- 7. Context Menu -->
+    <div id="context-menu">
+        <div class="menu-category">Data Inputs</div>
+        <div class="menu-item" onclick="addNode('HLSDataModule', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-emerald-500"></span> HLS Data Module
+        </div>
+        
+        <div class="menu-separator"></div>
+        <div class="menu-category">Model Architecture</div>
+        <div class="menu-item" onclick="addNode('ModelFactory', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-violet-500"></span> Model Factory
+        </div>
+        <div class="menu-item" onclick="addNode('OptimizerConfig', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-amber-500"></span> Optimizer
+        </div>
+
+        <div class="menu-separator"></div>
+        <div class="menu-category">Tasks</div>
+        <div class="menu-item" onclick="addNode('SegmentationTask', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-orange-500"></span> Segmentation Task
+        </div>
+        
+        <div class="menu-separator"></div>
+        <div class="menu-category">Training</div>
+        <div class="menu-item" onclick="addNode('TrainerConfig', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-blue-500"></span> Lightning Trainer
+        </div>
+    </div>
+
+    <script>
+        // --- 1. CORE ENGINE ---
+        const state = {
+            nodes: [],
+            connections: [],
+            pan: { x: 0, y: 0 },
+            zoom: 1,
+            isDraggingNode: null,
+            isDraggingCanvas: false,
+            dragStart: { x: 0, y: 0 },
+            tempLine: null 
+        };
+
+        const canvasBg = document.getElementById('canvas-bg');
+        const nodesContainer = document.getElementById('nodes-container');
+        const svgLayer = document.getElementById('connections-layer');
+        const contextMenu = document.getElementById('context-menu');
+        let contextMenuPos = { x: 0, y: 0 };
+
+        // --- 2. NODE DEFINITIONS (TerraFlow Schema) ---
+        const NODE_TYPES = {
+            // [DATA MODULE] - Emerald Theme
+            'HLSDataModule': {
+                title: 'HLS Data Module',
+                color: '#10b981', // Emerald 500
+                inputs: [],
+                outputs: ['datamodule'], 
+                params: [
+                    { key: 'batch_size', label: 'BATCH SIZE', type: 'number', default: 4 },
+                    { key: 'num_workers', label: 'WORKERS', type: 'number', default: 4 },
+                    { key: 'bands', label: 'BANDS', type: 'text', default: 'BLUE,GREEN,RED,NIR' }
+                ]
+            },
+            // [MODEL FACTORY] - Violet Theme
+            'ModelFactory': {
+                title: 'Model Factory',
+                color: '#8b5cf6', // Violet 500
+                inputs: [],
+                outputs: ['model_args'], 
+                params: [
+                    { key: 'backbone', label: 'BACKBONE', type: 'select', options: ['prithvi_100m', 'prithvi_300m', 'swin_base'], default: 'prithvi_100m' },
+                    { key: 'pretrained', label: 'PRETRAINED', type: 'select', options: ['True', 'False'], default: 'True' }
+                ]
+            },
+            // [OPTIMIZER] - Amber Theme
+            'OptimizerConfig': {
+                title: 'Optimizer',
+                color: '#f59e0b', // Amber 500
+                inputs: [],
+                outputs: ['optim_args'], 
+                params: [
+                    { key: 'lr', label: 'LEARNING RATE', type: 'text', default: '1e-4' },
+                    { key: 'weight_decay', label: 'WEIGHT DECAY', type: 'text', default: '0.05' },
+                    { key: 'type', label: 'OPTIMIZER TYPE', type: 'select', options: ['AdamW', 'SGD'], default: 'AdamW' }
+                ]
+            },
+            // [TASK] - Orange Theme
+            'SegmentationTask': {
+                title: 'Segmentation Task',
+                color: '#f97316', // Orange 500
+                inputs: ['model_args', 'optim_args'], 
+                outputs: ['task'], 
+                params: [
+                    { key: 'loss', label: 'LOSS FUNCTION', type: 'select', options: ['ce', 'dice', 'focal'], default: 'ce' },
+                    { key: 'num_classes', label: 'NUM CLASSES', type: 'number', default: 2 },
+                    { key: 'ignore_index', label: 'IGNORE INDEX', type: 'number', default: -1 }
+                ]
+            },
+            // [TRAINER] - Blue Theme
+            'TrainerConfig': {
+                title: 'Lightning Trainer',
+                color: '#3b82f6', // Blue 500
+                inputs: ['task', 'datamodule'],
+                outputs: [],
+                params: [
+                    { key: 'max_epochs', label: 'MAX EPOCHS', type: 'number', default: 20 },
+                    { key: 'accelerator', label: 'ACCELERATOR', type: 'select', options: ['gpu', 'cpu', 'auto'], default: 'gpu' },
+                    { key: 'precision', label: 'PRECISION', type: 'select', options: ['16-mixed', '32'], default: '16-mixed' }
+                ]
+            }
+        };
+
+        // --- 3. RENDERING LOGIC ---
+        function render() {
+            // Apply Transform to BOTH Containers
+            // We set transform-origin to 0 0 in CSS to ensure coordinate systems align
+            const transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+            
+            nodesContainer.style.transform = transform;
+            nodesContainer.style.transformOrigin = '0 0';
+
+            svgLayer.style.transform = transform;
+            svgLayer.style.transformOrigin = '0 0';
+            
+            renderConnections();
+        }
+
+        function createNodeDOM(node) {
+            const schema = NODE_TYPES[node.type];
+            const el = document.createElement('div');
+            el.className = 'node';
+            el.id = node.id;
+            el.style.left = `${node.x}px`;
+            el.style.top = `${node.y}px`;
+            
+            // Header with color strip
+            el.innerHTML = `
+                <div class="node-header" style="border-top: 3px solid ${schema.color}">
+                    <span style="color: ${schema.color}">${schema.title}</span>
+                    <i class="ph ph-x cursor-pointer text-gray-500 hover:text-red-400" onclick="deleteNode('${node.id}')"></i>
+                </div>
+                <div class="node-body"></div>
+            `;
+            
+            const body = el.querySelector('.node-body');
+
+            // Inputs
+            schema.inputs.forEach(inputName => {
+                const row = document.createElement('div');
+                row.className = 'socket-row input';
+                row.innerHTML = `
+                    <div class="port input" style="border-color: ${schema.color}" data-node="${node.id}" data-port="${inputName}" data-type="input" onmousedown="startLineDrag(event, '${node.id}', '${inputName}', 'input')" title="Input: ${inputName}"></div>
+                    <div class="socket-label">${formatPortName(inputName)}</div>
+                `;
+                body.appendChild(row);
+            });
+
+            // Params Inputs
+            schema.params.forEach(param => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'node-input-wrapper';
+                wrapper.innerHTML = `<label class="node-input-label">${param.label}</label>`;
+                
+                let input;
+                if (param.type === 'select') {
+                    input = document.createElement('select');
+                    param.options.forEach(opt => {
+                        const option = document.createElement('option');
+                        option.value = opt;
+                        option.text = opt;
+                        if(opt === node.data[param.key]) option.selected = true;
+                        input.appendChild(option);
+                    });
+                } else {
+                    input = document.createElement('input');
+                    input.type = param.type === 'number' ? 'number' : 'text';
+                    input.value = node.data[param.key] !== undefined ? node.data[param.key] : param.default;
+                }
+                
+                input.className = 'node-input';
+                input.onchange = (e) => { node.data[param.key] = e.target.value; };
+                input.onmousedown = (e) => e.stopPropagation();
+                
+                wrapper.appendChild(input);
+                body.appendChild(wrapper);
+            });
+
+            // Outputs
+            schema.outputs.forEach(outputName => {
+                const row = document.createElement('div');
+                row.className = 'socket-row output';
+                row.innerHTML = `
+                    <div class="socket-label">${formatPortName(outputName)}</div>
+                    <div class="port output" style="border-color: ${schema.color}" data-node="${node.id}" data-port="${outputName}" data-type="output" onmousedown="startLineDrag(event, '${node.id}', '${outputName}', 'output')" title="Output: ${outputName}"></div>
+                `;
+                body.appendChild(row);
+            });
+
+            // Node Drag Logic
+            const header = el.querySelector('.node-header');
+            header.onmousedown = (e) => {
+                e.stopPropagation(); 
+                state.isDraggingNode = node;
+                state.dragStart = { x: e.clientX, y: e.clientY };
+                
+                // Bring to front
+                state.nodes = state.nodes.filter(n => n !== node);
+                state.nodes.push(node);
+                el.style.zIndex = 10;
+                
+                // Visually select
+                document.querySelectorAll('.node').forEach(n => n.classList.remove('selected'));
+                el.classList.add('selected');
+            };
+            header.onmouseup = () => { el.style.zIndex = 2; };
+
+            nodesContainer.appendChild(el);
+        }
+
+        function formatPortName(name) {
+            return name.replace(/_/g, ' ').toUpperCase();
+        }
+
+        function renderConnections() {
+            svgLayer.innerHTML = '';
+            
+            state.connections.forEach(conn => {
+                const p1 = getPortPosition(conn.sourceNode, conn.sourcePort, 'output');
+                const p2 = getPortPosition(conn.targetNode, conn.targetPort, 'input');
+                if (p1 && p2) {
+                    drawCurve(p1, p2, false, conn);
+                }
+            });
+
+            if (state.tempLine) {
+                const startPos = getPortPosition(state.tempLine.nodeId, state.tempLine.portName, state.tempLine.type);
+                // Mouse is screen coord, transform to local canvas coord
+                const endPos = transformMouseToCanvas(state.tempLine.currentMouse.x, state.tempLine.currentMouse.y);
+                if (startPos) {
+                    if (state.tempLine.type === 'input') drawCurve(endPos, startPos, true);
+                    else drawCurve(startPos, endPos, true);
+                }
+            }
+        }
+
+        function drawCurve(p1, p2, isDrag, connData) {
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            
+            // ComfyUI style cubic bezier
+            const distX = Math.abs(p2.x - p1.x);
+            const distY = Math.abs(p2.y - p1.y);
+            
+            // Adaptive curvature
+            const curvature = 0.5;
+            const cp1 = { x: p1.x + Math.max(distX * curvature, 50), y: p1.y };
+            const cp2 = { x: p2.x - Math.max(distX * curvature, 50), y: p2.y };
+            
+            const d = `M ${p1.x} ${p1.y} C ${cp1.x} ${cp1.y} ${cp2.x} ${cp2.y} ${p2.x} ${p2.y}`;
+            path.setAttribute("d", d);
+            path.setAttribute("class", isDrag ? "drag-line" : "connection");
+            
+            // Color code the line based on the source node type if possible
+            if(!isDrag && connData) {
+                 const sourceNode = state.nodes.find(n => n.id === connData.sourceNode);
+                 if(sourceNode) {
+                     const color = NODE_TYPES[sourceNode.type].color;
+                     path.style.stroke = color;
+                     path.style.opacity = 0.8;
+                 }
+            }
+            
+            svgLayer.appendChild(path);
+        }
+
+        // --- 4. INTERACTION LOGIC ---
+        function getPortPosition(nodeId, portName, type) {
+            const selector = `.port[data-node="${nodeId}"][data-port="${portName}"][data-type="${type}"]`;
+            const el = document.querySelector(selector);
+            if (!el) return null;
+            
+            const rect = el.getBoundingClientRect();
+            // Since SVG and Nodes containers share the same Transform:
+            // We calculate the local coordinate within that transform space.
+            // Formula: (ScreenCoordinate - PanOffset) / ZoomFactor
+            return {
+                x: (rect.left + rect.width/2 - state.pan.x) / state.zoom,
+                y: (rect.top + rect.height/2 - state.pan.y) / state.zoom
+            };
+        }
+
+        function transformMouseToCanvas(mx, my) {
+            return {
+                x: (mx - state.pan.x) / state.zoom,
+                y: (my - state.pan.y) / state.zoom
+            };
+        }
+
+        function startLineDrag(e, nodeId, portName, type) {
+            e.stopPropagation();
+            state.tempLine = { nodeId, portName, type, currentMouse: { x: e.clientX, y: e.clientY } };
+        }
+
+        window.onmousemove = (e) => {
+            if (state.isDraggingNode) {
+                // Drag delta must be divided by zoom to track mouse correctly
+                const dx = (e.clientX - state.dragStart.x) / state.zoom;
+                const dy = (e.clientY - state.dragStart.y) / state.zoom;
+                state.isDraggingNode.x += dx;
+                state.isDraggingNode.y += dy;
+                
+                const el = document.getElementById(state.isDraggingNode.id);
+                el.style.left = `${state.isDraggingNode.x}px`;
+                el.style.top = `${state.isDraggingNode.y}px`;
+                
+                state.dragStart = { x: e.clientX, y: e.clientY };
+                renderConnections();
+            } else if (state.isDraggingCanvas) {
+                state.pan.x += e.clientX - state.dragStart.x;
+                state.pan.y += e.clientY - state.dragStart.y;
+                state.dragStart = { x: e.clientX, y: e.clientY };
+                render();
+                canvasBg.style.backgroundPosition = `${state.pan.x}px ${state.pan.y}px`;
+            } else if (state.tempLine) {
+                state.tempLine.currentMouse = { x: e.clientX, y: e.clientY };
+                renderConnections();
+            }
+        };
+
+        window.onmouseup = (e) => {
+            if (state.tempLine) {
+                const target = document.elementFromPoint(e.clientX, e.clientY);
+                if (target && target.classList.contains('port')) {
+                    const targetNode = target.getAttribute('data-node');
+                    const targetPort = target.getAttribute('data-port');
+                    const targetType = target.getAttribute('data-type');
+                    
+                    if (targetType !== state.tempLine.type && targetNode !== state.tempLine.nodeId) {
+                        const source = state.tempLine.type === 'output' ? 
+                            { node: state.tempLine.nodeId, port: state.tempLine.portName } : 
+                            { node: targetNode, port: targetPort };
+                        const dest = state.tempLine.type === 'output' ? 
+                            { node: targetNode, port: targetPort } : 
+                            { node: state.tempLine.nodeId, port: state.tempLine.portName };
+
+                        const exists = state.connections.some(c => 
+                            c.sourceNode === source.node && c.sourcePort === source.port &&
+                            c.targetNode === dest.node && c.targetPort === dest.port
+                        );
+                        
+                        if (!exists) {
+                            state.connections.push({
+                                sourceNode: source.node, sourcePort: source.port,
+                                targetNode: dest.node, targetPort: dest.port
+                            });
+                        }
+                    }
+                }
+                state.tempLine = null;
+                renderConnections();
+            }
+            state.isDraggingNode = null;
+            state.isDraggingCanvas = false;
+        };
+
+        canvasBg.onmousedown = (e) => {
+            if (e.button === 0) {
+                state.isDraggingCanvas = true;
+                state.dragStart = { x: e.clientX, y: e.clientY };
+                contextMenu.style.display = 'none';
+            }
+        };
+
+        window.oncontextmenu = (e) => {
+            e.preventDefault();
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = `${e.clientX}px`;
+            contextMenu.style.top = `${e.clientY}px`;
+            contextMenuPos = transformMouseToCanvas(e.clientX, e.clientY);
+        };
+
+        // --- Actions ---
+        function addNode(type, x, y) {
+            const id = 'node_' + Date.now();
+            const newNode = {
+                id, type, x: x || 100, y: y || 100, data: {}
+            };
+            NODE_TYPES[type].params.forEach(p => newNode.data[p.key] = p.default);
+            state.nodes.push(newNode);
+            createNodeDOM(newNode);
+            contextMenu.style.display = 'none';
+        }
+
+        function deleteNode(id) {
+            state.nodes = state.nodes.filter(n => n.id !== id);
+            state.connections = state.connections.filter(c => c.sourceNode !== id && c.targetNode !== id);
+            document.getElementById(id).remove();
+            renderConnections();
+        }
+
+        function clearCanvas() {
+            if(confirm("Are you sure you want to clear the canvas?")) {
+                state.nodes = []; state.connections = [];
+                nodesContainer.innerHTML = ''; svgLayer.innerHTML = '';
+            }
+        }
+        
+        function resetView() {
+            state.pan = { x: 0, y: 0 }; state.zoom = 1;
+            render();
+            canvasBg.style.backgroundPosition = `0px 0px`;
+        }
+        
+        window.onwheel = (e) => {
+            // Zoom logic
+            if (true) {
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                state.zoom *= delta;
+                // Clamp zoom
+                state.zoom = Math.max(0.2, Math.min(5, state.zoom));
+                render();
+            }
+        };
+
+        // --- 5. INITIALIZATION (Architecture Demo) ---
+        setTimeout(() => {
+            // Layout based on the Terratorch Diagram
+            addNode('ModelFactory', 100, 150);
+            addNode('OptimizerConfig', 100, 380);
+            addNode('SegmentationTask', 500, 220);
+            addNode('HLSDataModule', 500, 520);
+            addNode('TrainerConfig', 900, 380);
+            
+            setTimeout(() => {
+                const model = state.nodes[0].id;
+                const optim = state.nodes[1].id;
+                const task = state.nodes[2].id;
+                const data = state.nodes[3].id;
+                const trainer = state.nodes[4].id;
+                
+                state.connections.push(
+                    { sourceNode: model, sourcePort: 'model_args', targetNode: task, targetPort: 'model_args' },
+                    { sourceNode: optim, sourcePort: 'optim_args', targetNode: task, targetPort: 'optim_args' },
+                    { sourceNode: task, sourcePort: 'task', targetNode: trainer, targetPort: 'task' },
+                    { sourceNode: data, sourcePort: 'datamodule', targetNode: trainer, targetPort: 'datamodule' }
+                );
+                renderConnections();
+            }, 50);
+        }, 100);
+
+        // --- 6. COMPILER LOGIC ---
+        function compileAndExport() {
+            const trainerNode = state.nodes.find(n => n.type === 'TrainerConfig');
+            if (!trainerNode) {
+                alert("❌ Incomplete Architecture: Missing Trainer Node.");
+                return;
+            }
+
+            const findInput = (targetId, inputName) => {
+                const conn = state.connections.find(c => c.targetNode === targetId && c.targetPort === inputName);
+                if (!conn) return null;
+                return state.nodes.find(n => n.id === conn.sourceNode);
+            };
+
+            const taskNode = findInput(trainerNode.id, 'task');
+            const dataNode = findInput(trainerNode.id, 'datamodule');
+
+            if (!taskNode || !dataNode) {
+                alert("❌ Incomplete Architecture: Trainer must be connected to both a Task and a DataModule.");
+                return;
+            }
+
+            const modelNode = findInput(taskNode.id, 'model_args');
+            const optimNode = findInput(taskNode.id, 'optim_args');
+            
+            // Build Config Structure (Terratorch Standard)
+            const fullConfig = {
+                defaults: [{ "_self_": true }],
+                
+                trainer: {
+                    max_epochs: parseInt(trainerNode.data.max_epochs),
+                    accelerator: trainerNode.data.accelerator,
+                    precision: trainerNode.data.precision
+                },
+                
+                datamodule: {
+                    _target_: `terratorch.datamodules.${dataNode.type}`,
+                    batch_size: parseInt(dataNode.data.batch_size),
+                    num_workers: parseInt(dataNode.data.num_workers),
+                    bands: dataNode.data.bands.split(',')
+                },
+                
+                model: {
+                    _target_: `terratorch.tasks.${taskNode.type}`,
+                    num_classes: parseInt(taskNode.data.num_classes),
+                    loss: taskNode.data.loss,
+                    ignore_index: parseInt(taskNode.data.ignore_index),
+                    
+                    model_factory: modelNode ? {
+                        _target_: `terratorch.models.${modelNode.type}`,
+                        backbone: modelNode.data.backbone,
+                        pretrained: modelNode.data.pretrained === 'True'
+                    } : {},
+
+                    optimizer: optimNode ? {
+                        lr: parseFloat(optimNode.data.lr),
+                        weight_decay: parseFloat(optimNode.data.weight_decay),
+                        _target_: `torch.optim.${optimNode.data.type}`
+                    } : {}
+                }
+            };
+
+            const yamlString = jsyaml.dump(fullConfig);
+            const notebook = generateNotebookJSON(yamlString, taskNode.data.loss);
+            downloadJSON(notebook, 'TerraFlow_Job.ipynb');
+        }
+
+        function generateNotebookJSON(yamlString, lossType) {
+             const cells = [];
+            cells.push(mdCell(`# 🌍 TerraFlow Job\n\nGenerated by TerraFlow UI. \n\n**Components:**\n- **Task:** Segmentation (${lossType})`));
+            cells.push(codeCell(["!nvidia-smi"]));
+            cells.push(codeCell([
+                "%%capture\n",
+                "!pip install -q terratorch torchgeo pytorch-lightning\n",
+                "from google.colab import drive\n",
+                "drive.mount('/content/drive')\n"
+            ]));
+            cells.push(codeCell([
+                "from omegaconf import OmegaConf\n",
+                `config_str = """\n${yamlString}"""\n`,
+                "cfg = OmegaConf.create(config_str)\n",
+                "print('✅ Architecture Configuration Loaded')"
+            ]));
+            cells.push(codeCell([
+                "from terratorch.cli_tools import build_datamodule\n",
+                "import matplotlib.pyplot as plt\n\n",
+                "print('🔍 Instantiating DataModule...')\n",
+                "dm = build_datamodule(cfg.datamodule)\n",
+                "dm.setup('fit')\n",
+                "sample = next(iter(dm.train_dataloader()))\n",
+                "print(f'📦 Batch Shape: {sample[\"image\"].shape}')"
+            ]));
+            cells.push(codeCell([
+                "import pytorch_lightning as pl\n",
+                "from terratorch.cli_tools import build_lightning_module\n\n",
+                "print('🧠 Instantiating Task & Model...')\n",
+                "model = build_lightning_module(cfg.model)\n\n",
+                "print('⚙️ Instantiating Trainer...')\n",
+                "trainer = pl.Trainer(\n",
+                "    max_epochs=cfg.trainer.max_epochs,\n",
+                "    accelerator=cfg.trainer.accelerator,\n",
+                "    precision=cfg.trainer.precision\n",
+                ")\n\n",
+                "trainer.fit(model, dm)"
+            ]));
+
+            return {
+                cells: cells,
+                metadata: {
+                    kernelspec: { display_name: "Python 3", language: "python", name: "python3" },
+                    language_info: { name: "python", version: "3.10" }
+                },
+                nbformat: 4, nbformat_minor: 5
+            };
+        }
+
+        function mdCell(source) { return { cell_type: "markdown", metadata: {}, source: [source] }; }
+        function codeCell(source) { return { cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: source }; }
+        
+        function downloadJSON(data, filename) {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click();
+            document.body.removeChild(a); URL.revokeObjectURL(url);
+        }
+
+    </script>
+</body>
+</html>
