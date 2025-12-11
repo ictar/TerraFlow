@@ -22,10 +22,12 @@
 
     <!-- 3. Context Menu -->
     <div id="context-menu">
-        <div class="menu-category">Modules</div>
-        <div class="menu-item" onclick="addNode('HLSDataModule', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-emerald-500"></span> HLS Data Module
+        <div class="menu-category">Data</div>
+        <div class="menu-item" onclick="addNode('DataModule', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-emerald-500"></span> Data Module
         </div>
+        <div class="menu-separator"></div>
+        <div class="menu-category">Models</div>
         <div class="menu-item" onclick="addNode('ModelFactory', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-violet-500"></span> Model Configuration
         </div>
@@ -44,6 +46,20 @@
         </div>
         <div class="menu-item" onclick="addNode('Logger', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-pink-500"></span> Logger (TB/Wandb/CSV)
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-category">Transforms</div>
+        <div class="menu-item" onclick="addNode('AlbumentationsResize', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-cyan-500"></span> Resize
+        </div>
+        <div class="menu-item" onclick="addNode('AlbumentationsHorizontalFlip', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-cyan-500"></span> Horizontal Flip
+        </div>
+        <div class="menu-item" onclick="addNode('AlbumentationsVerticalFlip', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-cyan-500"></span> Vertical Flip
+        </div>
+        <div class="menu-item" onclick="addNode('ToTensorV2', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-cyan-500"></span> To Tensor
         </div>
         <div class="menu-separator"></div>
         <div class="menu-category">Callbacks</div>

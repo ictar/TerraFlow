@@ -1,16 +1,68 @@
 /* Node Definitions (TerraFlow Schema) */
 const NODE_TYPES = {
     // [DATA MODULE] - Emerald Theme
-    'HLSDataModule': {
-        title: 'HLS Data Module',
+    // [DATA MODULE] - Emerald Theme
+    // [DATA MODULE] - Emerald Theme
+    'DataModule': {
+        title: 'Data Module',
         color: '#10b981', // Emerald 500
-        inputs: [],
+        inputs: ['train_transform', 'val_transform', 'test_transform'],
         outputs: ['datamodule'], 
         params: [
+            { 
+                key: 'class_path', 
+                label: 'CLASS PATH', 
+                type: 'select', 
+                options: [
+                    'GenericNonGeoPixelwiseRegressionDataModule',
+                    'GenericNonGeoSegmentationDataModule',
+                    'Sen1Floods11NonGeoDataModule',
+                    'Landsat7DataModule',
+                    'TorchGeoDataModule'
+                ], 
+                default: 'GenericNonGeoSegmentationDataModule' 
+            },
+            { key: 'data_root', label: 'DATA ROOT', type: 'text', default: 'data/dataset' },
             { key: 'batch_size', label: 'BATCH SIZE', type: 'number', default: 4 },
             { key: 'num_workers', label: 'WORKERS', type: 'number', default: 4 },
-            { key: 'bands', label: 'BANDS', type: 'text', default: 'BLUE,GREEN,RED,NIR' }
+            { key: 'bands', label: 'BANDS', type: 'text', default: 'BLUE,GREEN,RED,NIR' },
+            { key: 'constant_scale', label: 'CONST SCALE', type: 'text', default: '0.0001' },
+            { key: 'no_data_replace', label: 'NO DATA VAL', type: 'number', default: 0 },
+            { key: 'no_label_replace', label: 'NO LABEL VAL', type: 'number', default: -1 },
+            { key: 'use_metadata', label: 'USE METADATA', type: 'select', options: ['True', 'False'], default: 'False' }
         ]
+    },
+    // [TRANSFORMS] - Cyan Theme
+    'AlbumentationsResize': {
+        title: 'Resize',
+        color: '#06b6d4', // Cyan 500
+        inputs: [], outputs: ['transform'],
+        params: [
+            { key: 'height', label: 'HEIGHT', type: 'number', default: 224 },
+            { key: 'width', label: 'WIDTH', type: 'number', default: 224 }
+        ]
+    },
+    'AlbumentationsHorizontalFlip': {
+        title: 'Horizontal Flip',
+        color: '#06b6d4',
+        inputs: [], outputs: ['transform'],
+        params: [
+            { key: 'p', label: 'PROBABILITY', type: 'text', default: '0.5' }
+        ]
+    },
+    'AlbumentationsVerticalFlip': {
+        title: 'Vertical Flip',
+        color: '#06b6d4',
+        inputs: [], outputs: ['transform'],
+        params: [
+            { key: 'p', label: 'PROBABILITY', type: 'text', default: '0.5' }
+        ]
+    },
+    'ToTensorV2': {
+        title: 'To Tensor',
+        color: '#06b6d4',
+        inputs: [], outputs: ['transform'],
+        params: []
     },
     // [MODEL FACTORY] - Violet Theme
     'ModelFactory': {

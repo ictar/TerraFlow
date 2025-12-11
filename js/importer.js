@@ -23,8 +23,8 @@ function handleFileImport(input) {
     reader.readAsText(file);
 }
 
-function reconstructGraph(config) {
-    if (!confirm("Importing will clear the current canvas. Continue?")) return;
+function reconstructGraph(config, silent = false) {
+    if (!silent && !confirm("Importing will clear the current canvas. Continue?")) return;
     
     // 1. Clear Canvas
     state.nodes = [];
@@ -130,11 +130,49 @@ function reconstructGraph(config) {
         if (config.data) {
             const init = config.data.init_args || {};
             const dataData = {
+                class_path: config.data.class_path || 'GenericNonGeoSegmentationDataModule',
+                data_root: init.data_root || 'data/dataset',
                 batch_size: init.batch_size,
                 num_workers: init.num_workers,
-                bands: Array.isArray(init.bands) ? init.bands.join(',') : init.bands
+                bands: Array.isArray(init.bands) ? init.bands.join(',') : init.bands,
+                constant_scale: init.constant_scale,
+                no_data_replace: init.no_data_replace,
+                no_label_replace: init.no_label_replace,
+                use_metadata: init.use_metadata ? 'True' : 'False'
             };
-            dataNode = addNode('HLSDataModule', 500, 520, dataData);
+            dataNode = addNode('DataModule', 500, 520, dataData);
+            
+            // Parse Transforms
+            ['train_transform', 'val_transform', 'test_transform'].forEach((key, keyIdx) => {
+                if (Array.isArray(init[key])) {
+                    init[key].forEach((t, i) => {
+                         let type = null;
+                         let tData = {};
+                         
+                         if (t.class_path.includes('Resize')) {
+                             type = 'AlbumentationsResize';
+                             tData = { height: t.init_args.height, width: t.init_args.width };
+                         } else if (t.class_path.includes('HorizontalFlip')) {
+                             type = 'AlbumentationsHorizontalFlip';
+                             tData = { p: t.init_args.p };
+                         } else if (t.class_path.includes('VerticalFlip')) {
+                             type = 'AlbumentationsVerticalFlip';
+                             tData = { p: t.init_args.p };
+                         } else if (t.class_path.includes('ToTensorV2')) {
+                             type = 'ToTensorV2';
+                         }
+                         
+                         if (type) {
+                             const tNode = addNode(type, 150 + (i * 180), 600 + (keyIdx * 150), tData);
+                             // Connect
+                             state.connections.push({
+                                 sourceNode: tNode.id, sourcePort: 'transform',
+                                 targetNode: dataNode.id, targetPort: key
+                             });
+                         }
+                    });
+                }
+            });
         }
 
         // --- Model / Task ---
@@ -202,6 +240,7 @@ function reconstructGraph(config) {
         // Failsafe for slower DOM updates
         setTimeout(() => {
             renderConnections();
+            if (typeof autoLayout === 'function') autoLayout();
         }, 100);
 
     } catch (err) {

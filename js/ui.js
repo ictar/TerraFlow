@@ -160,6 +160,21 @@ function drawCurve(p1, p2, isTemp, connData = null) {
     path.setAttribute('d', d);
     path.setAttribute('class', isTemp ? 'drag-line' : 'connection');
     
+    // Colorize based on Source Node
+    let sourceNodeId = null;
+    if (isTemp && state.tempLine) {
+        sourceNodeId = state.tempLine.startNode;
+    } else if (connData) {
+        sourceNodeId = connData.sourceNode;
+    }
+    
+    if (sourceNodeId) {
+        const node = state.nodes.find(n => n.id === sourceNodeId);
+        if (node && NODE_TYPES[node.type]) {
+            path.style.stroke = NODE_TYPES[node.type].color;
+        }
+    }
+    
     if (!isTemp && connData) {
         path.oncontextmenu = (e) => {
             e.preventDefault();

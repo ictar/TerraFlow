@@ -35,7 +35,7 @@ function buildHydraConfig() {
     // Construct Object
     const fullConfig = {
         defaults: [
-             { "/terratorch/datamodules": dataNode.type }, 
+             { "/terratorch/datamodules": "generic_non_geo_segmentation" }, // Simplified default for Hydra
              { "/terratorch/tasks": taskNode.type },
              { "/terratorch/trainers": "default_trainer" } // Using simple default for Hydra base
         ],
@@ -50,7 +50,7 @@ function buildHydraConfig() {
             log_every_n_steps: parseInt(trainerNode.data.log_every_n_steps)
         },
         datamodule: {
-            _target_: `terratorch.datamodules.${dataNode.type}`,
+            _target_: `terratorch.datamodules.${dataNode.data.class_path}`,
             batch_size: parseInt(dataNode.data.batch_size),
             num_workers: parseInt(dataNode.data.num_workers),
             bands: bands
@@ -197,29 +197,20 @@ function buildCLIConfig() {
             default_root_dir: trainerNode.data.default_root_dir
         },
         data: {
-            class_path: `terratorch.datamodules.${dataNode.type.replace('HLSDataModule', 'Sen1Floods11NonGeoDataModule')}`, // Heuristic mapping based on example
+            class_path: dataNode.data.class_path,
             init_args: {
-                data_root: "data/dataset",
+                data_root: dataNode.data.data_root,
                 batch_size: parseInt(dataNode.data.batch_size),
                 num_workers: parseInt(dataNode.data.num_workers),
-                constant_scale: 0.0001,
-                no_data_replace: 0,
-                no_label_replace: -1,
-                use_metadata: false,
+                // Common args usually needed for these datamodules
+                constant_scale: parseFloat(dataNode.data.constant_scale),
+                no_data_replace: parseInt(dataNode.data.no_data_replace),
+                no_label_replace: parseInt(dataNode.data.no_label_replace),
+                use_metadata: dataNode.data.use_metadata === 'True',
                 bands: bands,
-                train_transform: [
-                    { class_path: "albumentations.Resize", init_args: { height: 224, width: 224 } },
-                    { class_path: "albumentations.HorizontalFlip", init_args: { p: 0.5 } },
-                    { class_path: "ToTensorV2" }
-                ],
-                val_transform: [
-                    { class_path: "albumentations.Resize", init_args: { height: 224, width: 224 } },
-                    { class_path: "ToTensorV2" }
-                ],
-                test_transform: [
-                    { class_path: "albumentations.Resize", init_args: { height: 224, width: 224 } },
-                    { class_path: "ToTensorV2" }
-                ]
+                train_transform: gatherTransforms(dataNode.id, 'train_transform'),
+                val_transform: gatherTransforms(dataNode.id, 'val_transform'),
+                test_transform: gatherTransforms(dataNode.id, 'test_transform')
             }
         },
         model: {
@@ -261,6 +252,36 @@ function buildCLIConfig() {
     if (!cliConfig.trainer.logger) delete cliConfig.trainer.logger;
     
     return { yaml: jsyaml.dump(cliConfig) };
+}
+
+// Helper to gather and sort transforms (by Y position for sequence)
+function gatherTransforms(nodeId, portName) {
+    const nodes = findAllInputs(nodeId, portName);
+    // Sort by Y position (top to bottom execution)
+    nodes.sort((a, b) => a.y - b.y);
+    
+    return nodes.map(node => {
+        if (node.type === 'AlbumentationsResize') {
+            return { 
+                class_path: "albumentations.Resize", 
+                init_args: { height: parseInt(node.data.height), width: parseInt(node.data.width) } 
+            };
+        } else if (node.type === 'AlbumentationsHorizontalFlip') {
+            return { 
+                class_path: "albumentations.HorizontalFlip", 
+                init_args: { p: parseFloat(node.data.p) } 
+            };
+        } else if (node.type === 'AlbumentationsVerticalFlip') {
+             return { 
+                class_path: "albumentations.VerticalFlip", 
+                init_args: { p: parseFloat(node.data.p) } 
+            };
+        } else if (node.type === 'ToTensorV2') {
+             return { class_path: "ToTensorV2" }; // Usually albumentations.pytorch.ToTensorV2 but Terratorch alias? assume ToTensorV2 for now or needs full path?
+             // Using alias as per user example
+        }
+        return null;
+    }).filter(t => t);
 }
 
 // --- Helpers ---

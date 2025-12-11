@@ -1,5 +1,3 @@
-// Embedded default config for fallback (handles CORS/file:// issues)
-const DEFAULT_YAML = `
 seed_everything: 0
 trainer:
   accelerator: auto
@@ -74,7 +72,7 @@ model:
   init_args:
     model_args:
       backbone_pretrained: false
-      backbone: prithvi_eo_v1_100
+      backbone: <prithvi_model> # prithvi_vit_100, prithvi_eo_v2_300, prithvi_eo_v2_300_tl, prithvi_eo_v2_600, prithvi_eo_v2_600_tl
       decoder: UperNetDecoder
       decoder_channels: 256
       decoder_scale_modules: true
@@ -91,10 +89,21 @@ model:
       necks:
         - name: SelectIndices
           indices:
+            # indices for prithvi_vit_100
             - 2
             - 5
             - 8
             - 11
+            # indices for prithvi_eo_v2_300
+            # - 5
+            # - 11
+            # - 17
+            # - 23
+            # indices for prithvi_eo_v2_600
+            # - 7
+            # - 15
+            # - 23
+            # - 31
         - name: ReshapeTokensToImage
     loss: ce
     ignore_index: -1
@@ -112,41 +121,3 @@ lr_scheduler:
   class_path: CosineAnnealingLR
   init_args:
     T_max: 50
-`;
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Populate Bindings
-    canvasBg = document.getElementById('canvas-bg');
-    nodesContainer = document.getElementById('nodes-container');
-    svgLayer = document.getElementById('connections-layer');
-    contextMenu = document.getElementById('context-menu');
-    
-    // Init Events
-    initUIEvents();
-    
-    // Try to load default config from examples
-    fetch('examples/config.yaml')
-        .then(response => {
-            if (!response.ok) throw new Error("Default config not found");
-            return response.text();
-        })
-        .then(yamlText => {
-            console.log("Loading default config...");
-            setTimeout(() => {
-                 const config = jsyaml.load(yamlText);
-                 reconstructGraph(config, true);
-            }, 100);
-        })
-        .catch(err => {
-            console.warn("Could not load examples/config.yaml (likely CORS), utilizing embedded default.", err);
-            // Fallback to embedded yaml
-            setTimeout(() => {
-                try {
-                    const config = jsyaml.load(DEFAULT_YAML);
-                    reconstructGraph(config, true);
-                } catch (e) {
-                    console.error("Error parsing default yaml", e);
-                }
-            }, 100);
-        });
-});

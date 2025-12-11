@@ -10,7 +10,8 @@
 - 🔌 **Terratorch Native**: First-class support for Terratorch components:
     - **Models**: Prithvi (100M, 300M), Clay, SatMAE, ScaleMAE, Swin, ResNet, etc.
     - **Tasks**: Segmentation, Pixel-wise Regression.
-    - **Data**: HLS DataModule (customizable bands).
+    - **Data**: Generic DataModules (Sen1Floods11, Landsat, Geo/Non-Geo) with custom `data_root`.
+    - **Transforms**: Visual pipeline for Albumentations (Resize, Flip, ToTensor), ordered spatially.
 - 🧠 **Advanced Config**:
     - **Multiple Callbacks**: Early Stopping, Model Checkpoint, LR Monitor, Rich Progress Bar.
     - **Flexible Logging**: TensorBoard, Wandb, CSV, MLFlow.
@@ -59,6 +60,7 @@ TerraFlow is now fully modularized:
 - [x] **Import Functionality**: Load existing YAMLs.
 - [x] **Auto Layout**: Intelligent graph organization.
 - [x] **Advanced Callbacks & Loggers**: Full Lightning support.
+- [x] **Data Augmentation**: Visual Transforms pipeline.
 - [ ] Custom Nodes: Define custom model architectures via UI.
 - [ ] Live Preview: Connect to a Python backend to preview dataset chips.
 
