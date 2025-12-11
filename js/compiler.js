@@ -6,6 +6,11 @@ function findInput(nodeId, portName) {
     return state.nodes.find(n => n.id === conn.sourceNode);
 }
 
+function findAllInputs(nodeId, portName) {
+    const conns = state.connections.filter(c => c.targetNode === nodeId && c.targetPort === portName);
+    return conns.map(conn => state.nodes.find(n => n.id === conn.sourceNode)).filter(n => n);
+}
+
 function validateDetails(trainerNode) {
     if (!trainerNode) throw new Error("Graph must contain a Trainer node.");
     
@@ -56,7 +61,7 @@ function buildHydraConfig() {
             ignore_index: parseInt(taskNode.data.ignore_index),
             model_args: {
                 decoder: "UperNetDecoder",
-                backbone: modelNode ? modelNode.data.backbone : "prithvi_100m",
+                backbone: modelNode ? modelNode.data.backbone : "prithvi_eo_v1_100",
                 num_classes: parseInt(taskNode.data.num_classes),
                 backbone_pretrained: modelNode ? (modelNode.data.pretrained === 'True') : true
             }
@@ -83,58 +88,113 @@ function buildCLIConfig() {
     
     // New: Find connected Logger and Callback
     const loggerNode = findInput(trainerNode.id, 'logger');
-    const esNode = findInput(trainerNode.id, 'early_stopping');
+    const callbackNodes = findAllInputs(trainerNode.id, 'callbacks');
 
     const bands = (dataNode.data.bands || 'BLUE,GREEN,RED,NIR').split(',');
-    const backbone = modelNode ? modelNode.data.backbone : 'prithvi_100m';
+    const backbone = modelNode ? modelNode.data.backbone : 'prithvi_eo_v1_100';
     
+    // Logic for Necks based on Backbone (Reference from User request)
     // Logic for Necks based on Backbone (Reference from User request)
     let necks = [];
     if (backbone.includes('prithvi')) {
-        let indices = [2, 5, 8, 11]; // Default for 100m
-        if (backbone.includes('300')) indices = [5, 11, 17, 23];
+        let indices = [2, 5, 8, 11]; // Default for 100m / prithvi_eo_v1_100
+        if (backbone.includes('300')) indices = [5, 11, 17, 23]; // prithvi_eo_v2_300
         if (backbone.includes('600')) indices = [7, 15, 23, 31];
         
         necks = [
             { name: "SelectIndices", indices: indices },
             { name: "ReshapeTokensToImage" }
         ];
+    } else if (backbone.includes('clay') || backbone.includes('satmae') || backbone.includes('scale_mae')) {
+        // ViT-based models often need reshaping if they output tokens
+        // For now, leaving empty or adding specific necks if known. 
+        // Clay v1 usually works with a specific decoder adapter or neck.
+        // Assuming default behavior or adding a placeholder comment for expansion.
+        // necks = [{ name: "ReshapeTokensToImage" }]; // Example if needed
     }
     
     // Construct Callbacks List
-    const callbacks = [
-         { class_path: "RichProgressBar" },
-         { class_path: "LearningRateMonitor", init_args: { logging_interval: "epoch" } }
-    ];
+    const callbacks = [];
     
-    if (esNode) {
-        callbacks.push({
-            class_path: "lightning.pytorch.callbacks.EarlyStopping",
-            init_args: {
-                patience: parseInt(esNode.data.patience),
-                monitor: esNode.data.monitor
+    // If user hasn't added any callbacks, maybe default to RichProgressBar? 
+    // Or just always add it if not present? 
+    // Let's iterate connected nodes.
+    
+    if (callbackNodes.length === 0) {
+        // Default behavior if nothing connected
+        callbacks.push({ class_path: "RichProgressBar" });
+        callbacks.push({ class_path: "LearningRateMonitor", init_args: { logging_interval: "epoch" } });
+    } else {
+        callbackNodes.forEach(node => {
+            if (node.type === 'EarlyStopping') {
+                callbacks.push({
+                    class_path: "lightning.pytorch.callbacks.EarlyStopping",
+                    init_args: {
+                        patience: parseInt(node.data.patience),
+                        monitor: node.data.monitor,
+                        mode: node.data.mode
+                    }
+                });
+            } else if (node.type === 'ModelCheckpoint') {
+                callbacks.push({
+                    class_path: "lightning.pytorch.callbacks.ModelCheckpoint",
+                    init_args: {
+                        monitor: node.data.monitor,
+                        mode: node.data.mode,
+                        save_top_k: parseInt(node.data.save_top_k),
+                        filename: node.data.filename
+                    }
+                });
+            } else if (node.type === 'LearningRateMonitor') {
+                callbacks.push({
+                    class_path: "LearningRateMonitor",
+                    init_args: { logging_interval: node.data.logging_interval }
+                });
+            } else if (node.type === 'RichProgressBar') {
+                callbacks.push({ class_path: "RichProgressBar" });
             }
         });
     }
 
     const cliConfig = {
-        seed_everything: 0,
+        seed_everything: state.globalConfig.seed_everything,
         trainer: {
             accelerator: trainerNode.data.accelerator,
             strategy: trainerNode.data.strategy,
             devices: trainerNode.data.devices === 'auto' ? 'auto' : (parseInt(trainerNode.data.devices) || trainerNode.data.devices),
             num_nodes: parseInt(trainerNode.data.num_nodes),
             precision: trainerNode.data.precision,
-            logger: loggerNode ? {
-                class_path: "TensorBoardLogger",
-                init_args: { save_dir: loggerNode.data.save_dir, name: loggerNode.data.name }
-            } : null,
+            precision: trainerNode.data.precision,
+            logger: (() => {
+                if (!loggerNode) return null;
+                const type = loggerNode.data.type;
+                const args = { save_dir: loggerNode.data.save_dir, name: loggerNode.data.name };
+                
+                let classPath = "lightning.pytorch.loggers.TensorBoardLogger";
+                if (type === 'Wandb') {
+                    classPath = "lightning.pytorch.loggers.WandbLogger";
+                    args.project = loggerNode.data.project;
+                    args.log_model = true;
+                } else if (type === 'CSV') {
+                    classPath = "lightning.pytorch.loggers.CSVLogger";
+                } else if (type === 'MLFlow') {
+                    classPath = "lightning.pytorch.loggers.MLFlowLogger";
+                    args.experiment_name = loggerNode.data.project;
+                    args.run_name = loggerNode.data.name;
+                    delete args.name; // MLFlow uses run_name
+                }
+                
+                return {
+                    class_path: classPath,
+                    init_args: args
+                };
+            })(),
             callbacks: callbacks,
             max_epochs: parseInt(trainerNode.data.max_epochs),
             check_val_every_n_epoch: parseInt(trainerNode.data.check_val_every_n_epoch),
             log_every_n_steps: parseInt(trainerNode.data.log_every_n_steps),
-            enable_checkpointing: true,
-            default_root_dir: "checkpoints"
+            enable_checkpointing: trainerNode.data.enable_checkpointing === 'True',
+            default_root_dir: trainerNode.data.default_root_dir
         },
         data: {
             class_path: `terratorch.datamodules.${dataNode.type.replace('HLSDataModule', 'Sen1Floods11NonGeoDataModule')}`, // Heuristic mapping based on example

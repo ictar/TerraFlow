@@ -19,7 +19,23 @@ const NODE_TYPES = {
         inputs: [],
         outputs: ['model_args'], 
         params: [
-            { key: 'backbone', label: 'BACKBONE', type: 'select', options: ['prithvi_100m', 'prithvi_300m', 'swin_base'], default: 'prithvi_100m' },
+            { 
+                key: 'backbone', 
+                label: 'BACKBONE', 
+                type: 'select', 
+                options: [
+                    'prithvi_eo_v1_100', 
+                    'prithvi_eo_v2_300', 
+                    'clay_v1_base', 
+                    'satmae_vit_base_patch16', 
+                    'scale_mae', 
+                    'swin_base_patch4_window12_384', 
+                    'resnet50', 
+                    'dofa_base_patch16_224',
+                    'terramind_v1_base'
+                ], 
+                default: 'prithvi_eo_v1_100' 
+            },
             { key: 'pretrained', label: 'PRETRAINED', type: 'select', options: ['True', 'False'], default: 'True' }
         ]
     },
@@ -48,16 +64,20 @@ const NODE_TYPES = {
         ]
     },
     // [LOGGER] - Pink Theme
-    'TensorBoardLogger': {
-        title: 'TensorBoard Logger',
+    // [LOGGER] - Pink Theme
+    'Logger': {
+        title: 'Logger',
         color: '#ec4899', // Pink 500
         inputs: [],
         outputs: ['logger'],
         params: [
-            { key: 'name', label: 'NAME', type: 'text', default: 'terraflow_run' },
+            { key: 'type', label: 'TYPE', type: 'select', options: ['TensorBoard', 'Wandb', 'CSV', 'MLFlow'], default: 'TensorBoard' },
+            { key: 'project', label: 'PROJECT (Wandb/MLFlow)', type: 'text', default: 'terraflow_project' },
+            { key: 'name', label: 'RUN NAME', type: 'text', default: 'run_version_1' },
             { key: 'save_dir', label: 'SAVE DIR', type: 'text', default: 'logs' }
         ]
     },
+    // [CALLBACK] - Rose Theme
     // [CALLBACK] - Rose Theme
     'EarlyStopping': {
         title: 'Early Stopping',
@@ -66,14 +86,43 @@ const NODE_TYPES = {
         outputs: ['callback'],
         params: [
             { key: 'patience', label: 'PATIENCE', type: 'number', default: 20 },
-            { key: 'monitor', label: 'MONITOR', type: 'text', default: 'val/loss' }
+            { key: 'monitor', label: 'MONITOR', type: 'text', default: 'val/loss' },
+            { key: 'mode', label: 'MODE', type: 'select', options: ['min', 'max'], default: 'min' }
         ]
+    },
+    'ModelCheckpoint': {
+        title: 'Model Checkpoint',
+        color: '#f43f5e',
+        inputs: [],
+        outputs: ['callback'],
+        params: [
+            { key: 'monitor', label: 'MONITOR', type: 'text', default: 'val/loss' },
+            { key: 'mode', label: 'MODE', type: 'select', options: ['min', 'max'], default: 'min' },
+            { key: 'save_top_k', label: 'SAVE TOP K', type: 'number', default: 1 },
+            { key: 'filename', label: 'FILENAME', type: 'text', default: '{epoch}-{val/loss:.2f}' }
+        ]
+    },
+    'LearningRateMonitor': {
+        title: 'LR Monitor',
+        color: '#f43f5e',
+        inputs: [],
+        outputs: ['callback'],
+        params: [
+            { key: 'logging_interval', label: 'LOG INTERVAL', type: 'select', options: ['step', 'epoch'], default: 'epoch' }
+        ]
+    },
+    'RichProgressBar': {
+        title: 'Rich Progress Bar',
+        color: '#f43f5e',
+        inputs: [],
+        outputs: ['callback'],
+        params: []
     },
     // [TRAINER] - Blue Theme
     'TrainerConfig': {
         title: 'Lightning Trainer',
         color: '#3b82f6', // Blue 500
-        inputs: ['task', 'datamodule', 'logger', 'early_stopping'],
+        inputs: ['task', 'datamodule', 'logger', 'callbacks'],
         outputs: [],
         params: [
             { key: 'max_epochs', label: 'MAX EPOCHS', type: 'number', default: 50 },
@@ -83,7 +132,9 @@ const NODE_TYPES = {
             { key: 'num_nodes', label: 'NUM NODES', type: 'number', default: 1 },
             { key: 'precision', label: 'PRECISION', type: 'select', options: ['16-mixed', '32'], default: '16-mixed' },
             { key: 'check_val_every_n_epoch', label: 'VAL CHECK INTERVAL', type: 'number', default: 2 },
-            { key: 'log_every_n_steps', label: 'LOG STEP INTERVAL', type: 'number', default: 10 }
+            { key: 'log_every_n_steps', label: 'LOG STEP INTERVAL', type: 'number', default: 10 },
+            { key: 'enable_checkpointing', label: 'ENABLE CHECKPOINTING', type: 'select', options: ['True', 'False'], default: 'True' },
+            { key: 'default_root_dir', label: 'ROOT DIR', type: 'text', default: 'checkpoints' }
         ]
     }
 };

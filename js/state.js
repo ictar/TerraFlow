@@ -7,7 +7,12 @@ const state = {
     isDraggingNode: null,
     isDraggingCanvas: false,
     dragStart: { x: 0, y: 0 },
-    tempLine: null 
+    tempLine: null,
+    
+    // Global Config
+    globalConfig: {
+        seed_everything: 0
+    }
 };
 
 // Global DOM References (populated on load)

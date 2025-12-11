@@ -47,6 +47,11 @@ function reconstructGraph(config) {
             trainerData.num_nodes = config.trainer.num_nodes;
             trainerData.check_val_every_n_epoch = config.trainer.check_val_every_n_epoch;
             trainerData.log_every_n_steps = config.trainer.log_every_n_steps;
+            trainerData.enable_checkpointing = config.trainer.enable_checkpointing === false ? 'False' : 'True';
+            trainerData.default_root_dir = config.trainer.default_root_dir || 'checkpoints';
+            state.globalConfig.seed_everything = config.seed_everything !== undefined ? config.seed_everything : 0;
+            // Update UI Panel
+            if (typeof updateGlobalUI === 'function') updateGlobalUI();
         }
         const trainerNode = addNode('TrainerConfig', 900, 380, trainerData);
             
@@ -54,25 +59,70 @@ function reconstructGraph(config) {
         let loggerNode, esNode;
         if (config.trainer) {
             // Parse Logger
-            if (config.trainer.logger && config.trainer.logger.init_args) {
+            const loggerConfig = config.trainer.logger;
+            if (loggerConfig) {
+                const init = loggerConfig.init_args || {};
+                let type = 'TensorBoard';
+                let project = 'terraflow_project';
+                let name = init.name || 'terraflow_run';
+                
+                const cls = loggerConfig.class_path || '';
+                if (cls.includes('Wandb')) {
+                    type = 'Wandb';
+                    project = init.project;
+                } else if (cls.includes('CSV')) {
+                    type = 'CSV';
+                } else if (cls.includes('MLFlow')) {
+                    type = 'MLFlow';
+                    project = init.experiment_name;
+                    name = init.run_name;
+                }
+
                 const loggerData = {
-                    name: config.trainer.logger.init_args.name,
-                    save_dir: config.trainer.logger.init_args.save_dir || 'logs'
+                    type: type,
+                    project: project || 'terraflow_project',
+                    name: name,
+                    save_dir: init.save_dir || 'logs'
                 };
-                loggerNode = addNode('TensorBoardLogger', 900, 200, loggerData);
+                loggerNode = addNode('Logger', 900, 200, loggerData);
             }
             
-            // Parse Callbacks (Find EarlyStopping)
+            // Parse Callbacks
+            const callbackNodesData = [];
             if (Array.isArray(config.trainer.callbacks)) {
-                const es = config.trainer.callbacks.find(c => c.class_path && c.class_path.includes('EarlyStopping'));
-                if (es && es.init_args) {
-                    const esData = {
-                        patience: es.init_args.patience,
-                        monitor: es.init_args.monitor || 'val/loss'
-                    };
-                    esNode = addNode('EarlyStopping', 700, 600, esData);
-                }
+                config.trainer.callbacks.forEach((cb, idx) => {
+                    const cp = cb.class_path || '';
+                    if (cp.includes('EarlyStopping')) {
+                         const d = { 
+                             patience: cb.init_args?.patience, 
+                             monitor: cb.init_args?.monitor || 'val/loss',
+                             mode: cb.init_args?.mode || 'min'
+                         };
+                         callbackNodesData.push({ type: 'EarlyStopping', data: d });
+                    } else if (cp.includes('ModelCheckpoint')) {
+                         const d = {
+                             monitor: cb.init_args?.monitor || 'val/loss',
+                             mode: cb.init_args?.mode || 'min',
+                             save_top_k: cb.init_args?.save_top_k || 1,
+                             filename: cb.init_args?.filename
+                         };
+                         callbackNodesData.push({ type: 'ModelCheckpoint', data: d });
+                    } else if (cp.includes('LearningRateMonitor')) {
+                         const d = { logging_interval: cb.init_args?.logging_interval || 'epoch' };
+                         callbackNodesData.push({ type: 'LearningRateMonitor', data: d });
+                    } else if (cp.includes('RichProgressBar')) {
+                         callbackNodesData.push({ type: 'RichProgressBar', data: {} });
+                    }
+                });
             }
+            
+            // Create Callback Nodes
+            // We need to store them to connect later
+            var createdCallbackNodes = [];
+            callbackNodesData.forEach((item, i) => {
+                const node = addNode(item.type, 700 + (i*50), 600 + (i*150), item.data);
+                createdCallbackNodes.push(node);
+            });
         }
 
         // --- Data ---
@@ -139,8 +189,10 @@ function reconstructGraph(config) {
         if (loggerNode && trainerNode) {
              state.connections.push({ sourceNode: loggerNode.id, sourcePort: 'logger', targetNode: trainerNode.id, targetPort: 'logger' });
         }
-        if (esNode && trainerNode) {
-             state.connections.push({ sourceNode: esNode.id, sourcePort: 'callback', targetNode: trainerNode.id, targetPort: 'early_stopping' });
+        if (createdCallbackNodes.length > 0 && trainerNode) {
+             createdCallbackNodes.forEach(cbNode => {
+                 state.connections.push({ sourceNode: cbNode.id, sourcePort: 'callback', targetNode: trainerNode.id, targetPort: 'callbacks' });
+             });
         }
         
         // Use multiple render strategies to ensure lines appear

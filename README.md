@@ -6,61 +6,61 @@
 
 ## ✨ Features
 
-- 🎨 Visual Workflow: Drag-and-drop interface inspired by ComfyUI. No need to write complex YAML configs manually.
-- 🔌 Terratorch Native: First-class support for Terratorch components (Prithvi, Swin, HLS DataModules, Segmentation Tasks).
-
-- 🚀 One-Click Export: Compiles your visual graph into a standardized .ipynb notebook with automatic GPU checks and dependency installation.
-
-- 🔒 Privacy First: Runs 100% in your browser. No backend server required; your graph data never leaves your device.
-
-- ⚡ Real-time Validation: Ensures your architecture connects correctly (e.g., Model -> Task -> Trainer) before export.
+- 🎨 **Visual Workflow**: Drag-and-drop interface inspired by ComfyUI/SVP. Modular CSS/JS structure for easy maintenance.
+- 🔌 **Terratorch Native**: First-class support for Terratorch components:
+    - **Models**: Prithvi (100M, 300M), Clay, SatMAE, ScaleMAE, Swin, ResNet, etc.
+    - **Tasks**: Segmentation, Pixel-wise Regression.
+    - **Data**: HLS DataModule (customizable bands).
+- 🧠 **Advanced Config**:
+    - **Multiple Callbacks**: Early Stopping, Model Checkpoint, LR Monitor, Rich Progress Bar.
+    - **Flexible Logging**: TensorBoard, Wandb, CSV, MLFlow.
+    - **Global Settings**: Centralized management for random seeds and environment configs.
+- 🔄 **Re-Layout & Import**:
+    - **Import YAML**: Load existing `.yaml` configuration files and reconstruct the visual graph instantly.
+    - **Auto Layout**: One-click graph organization to untangle complex pipelines.
+- 🚀 **Export**: Compiles to standardized `.ipynb` notebooks or raw `.yaml` configs.
+- 🔒 **Privacy First**: Runs 100% in your browser. No backend server required.
 
 ## 🚀 Getting Started
 
 ### Installation
 
-TerraFlow is designed to be zero-dependency for the UI itself.
+TerraFlow is valid static HTML/JS. No build step required for the UI.
 
 1. Clone the repository:
+```bash
+git clone https://github.com/ictar/TerraFlow.git
 ```
-git clone [https://github.com/your-username/TerraFlow.git](https://github.com/your-username/TerraFlow.git)
-``
 
-2. Run: Simply open `index.html` in any modern web browser (Chrome, Edge, Firefox).
-
-*Optional: If you want to serve it locally*:
-```sh
-python3 -m http.server 8000
-# Open http://localhost:8000 in your browser
-```
+2. Run: Simply open `index.html` in any modern web browser.
 
 ### Usage
 
-1. Add Nodes: Right-click on the canvas to add Data Modules, Models, Tasks, or Trainers.
-2. Connect: Drag from an Output port (Green) to an Input port (Blue).
-3. Configure: Tweak parameters like Learning Rate, Epochs, or Backbones directly on the nodes.
-4. Export: Click the "Export Notebook" button to download your training job.
-5. Train: Upload the .ipynb to Google Colab or your GPU server and run!
-
+1. **Add Nodes**: Right-click canvas to add modules (Data, Models, Tasks) or specialized components (Loggers, Callbacks).
+2. **Connect**: Drag from Output ports (Green) to Input ports (Blue).
+3. **Configure**:
+    - Tweak node parameters (Learning Rate, Backbones).
+    - Use the **Global Settings** panel (bottom-right) for Seed/Checkpoint config.
+    - Use the **Relayout** button (bottom-left) to organize messy graphs.
+4. **Export**: Click export buttons (top-right) for `.ipynb` or `.yaml`.
 
 ## 🛠️ Architecture
 
-TerraFlow acts as a Graph Compiler. It translates the Directed Acyclic Graph (DAG) you build visually into a valid Hydra/OmegaConf configuration, which is then injected into a PyTorch Lightning training script.
-```
-graph LR
-    A[Visual Graph (React Flow)] -->|Compile| B(JSON Intermediate Representation)
-    B -->|Transpile| C{Hydra/YAML Config}
-    C -->|Inject| D[Jupyter Notebook (.ipynb)]
-    D -->|Run| E[Terratorch Training Job]
-```
+TerraFlow is now fully modularized:
+- `js/nodes.js`: Node definitions and schema.
+- `js/ui.js`: Rendering engine, interaction logic, and auto-layout.
+- `js/compiler.js`: Logic to transpile the graph into Hydra/Lightning configs.
+- `js/importer.js`: Logic to parse YAML and reconstruct the graph.
+- `js/state.js`: Global state management.
 
 ## 🗺️ Roadmap
 - [x] Basic Node Editor & Canvas
-- [x] Export to Jupyter Notebook
-- [x] Support for Segmentation Tasks
-- [ ] Import Functionality: Load existing YAML configs into the graph.
+- [x] Export to Jupyter Notebook & YAML
+- [x] **Import Functionality**: Load existing YAMLs.
+- [x] **Auto Layout**: Intelligent graph organization.
+- [x] **Advanced Callbacks & Loggers**: Full Lightning support.
 - [ ] Custom Nodes: Define custom model architectures via UI.
-- [ ] Live Preview: Connect to a Python backend to preview dataset chips in real-time.
+- [ ] Live Preview: Connect to a Python backend to preview dataset chips.
 
 ## 🤝 Contributing
 

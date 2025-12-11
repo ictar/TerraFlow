@@ -354,6 +354,23 @@ function autoLayout() {
     renderConnections();
     // Reset view to center content (optional)?
     // Let's just fit view loosely? No, keep user zoom.
+    state.zoom = 1;
+    render();
+}
+
+// --- Global Settings Logic ---
+
+function updateGlobalSetting(key, value) {
+    if (key === 'seed_everything') {
+        state.globalConfig.seed_everything = parseInt(value) || 0;
+    }
+}
+
+function updateGlobalUI() {
+    const seedEl = document.getElementById('global-seed');
+    if (seedEl) {
+        seedEl.value = state.globalConfig.seed_everything;
+    }
 }
 
 // --- Event Listeners Initialization ---
