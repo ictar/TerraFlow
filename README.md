@@ -65,6 +65,7 @@ TerraFlow is now fully modularized:
 - [x] **Auto Layout**: Intelligent graph organization.
 - [x] **Modular Architecture**: Backbone/Neck/Decoder/Head splitting.
 - [x] **Advanced Tasks**: Regression & Tiled Inference.
+- [x] **Developer Experience**: Pythonic Notebook Export & Global Experiment Settings.
 - [ ] Custom Nodes: Define custom model architectures via UI.
 - [ ] Live Preview: Connect to a Python backend to preview dataset chips.
 

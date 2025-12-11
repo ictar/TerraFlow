@@ -310,11 +310,67 @@ function clearCanvas() {
     svgLayer.innerHTML = '';
 }
 
+// Fit to Screen / Reset View
 function resetView() {
-    state.pan = { x: 0, y: 0 };
-    state.zoom = 1;
+    if (state.nodes.length === 0) {
+        state.pan = { x: 0, y: 0 };
+        state.zoom = 1;
+        render();
+        return;
+    }
+
+    // Calculate Bounding Box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    state.nodes.forEach(n => {
+        if (n.x < minX) minX = n.x;
+        if (n.y < minY) minY = n.y;
+        // Approx width/height - assuming 200x100 for safety or using DOM if available
+        // Using a safe estimate
+        const width = 250; 
+        const height = 150;
+        if (n.x + width > maxX) maxX = n.x + width;
+        if (n.y + height > maxY) maxY = n.y + height;
+    });
+
+    // Add padding
+    const PADDING = 50;
+    minX -= PADDING;
+    minY -= PADDING;
+    maxX += PADDING;
+    maxY += PADDING;
+
+    const graphW = maxX - minX;
+    const graphH = maxY - minY;
+
+    // Viewport size
+    const container = document.getElementById('nodes-container').parentElement; // #canvas-bg or wrapper
+    const viewW = container.clientWidth || window.innerWidth;
+    const viewH = container.clientHeight || window.innerHeight;
+
+    // Determine scale to fit
+    const scaleX = viewW / graphW;
+    const scaleY = viewH / graphH;
+    let newScale = Math.min(scaleX, scaleY);
+    
+    // Clamp scale
+    newScale = Math.min(Math.max(newScale, 0.2), 1.2);
+
+    state.zoom = newScale;
+
+    // Center
+    // center of graph = minX + graphW/2
+    // center of view = viewW/2
+    // pan = viewCenter - (graphCenter * scale)
+    
+    state.pan.x = (viewW / 2) - ((minX + graphW / 2) * newScale);
+    state.pan.y = (viewH / 2) - ((minY + graphH / 2) * newScale);
+
     render();
 }
+window.resetView = resetView; // Expose to global scope for HTML button
+window.addNode = addNode; // Ensure other globals are exposed if needed
+window.autoLayout = autoLayout;
+window.clearCanvas = clearCanvas;
 
 function autoLayout() {
     // 1. Build Adjacency & Reverse Adjacency

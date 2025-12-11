@@ -263,7 +263,7 @@ const NODE_TYPES = {
     'TrainerConfig': {
         title: 'Lightning Trainer',
         color: '#3b82f6', // Blue 500
-        inputs: ['task', 'datamodule', 'logger', 'callbacks'],
+        inputs: ['datamodule', 'task', 'logger', 'callbacks'],
         outputs: [],
         params: [
             { key: 'max_epochs', label: 'MAX EPOCHS', type: 'number', default: 50 },
