@@ -211,6 +211,8 @@ path.drag-line {
     z-index: 100;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(10px);
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .menu-item {

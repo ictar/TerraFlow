@@ -64,20 +64,21 @@ const NODE_TYPES = {
         inputs: [], outputs: ['transform'],
         params: []
     },
-    // [MODEL FACTORY] - Violet Theme
-    'ModelFactory': {
-        title: 'Model Factory',
-        color: '#8b5cf6', // Violet 500
+    // [ARCHITECTURE] - Violet Theme
+    'ModelBackbone': {
+        title: 'Backbone',
+        color: '#7c3aed', // Violet 600
         inputs: [],
-        outputs: ['model_args'], 
+        outputs: ['backbone_config'],
         params: [
             { 
-                key: 'backbone', 
-                label: 'BACKBONE', 
+                key: 'model_name', 
+                label: 'MODEL', 
                 type: 'select', 
                 options: [
                     'prithvi_eo_v1_100', 
                     'prithvi_eo_v2_300', 
+                    'prithvi_eo_v2_600',
                     'clay_v1_base', 
                     'satmae_vit_base_patch16', 
                     'scale_mae', 
@@ -88,31 +89,119 @@ const NODE_TYPES = {
                 ], 
                 default: 'prithvi_eo_v1_100' 
             },
-            { key: 'pretrained', label: 'PRETRAINED', type: 'select', options: ['True', 'False'], default: 'True' }
+            { key: 'pretrained', label: 'PRETRAINED', type: 'select', options: ['True', 'False'], default: 'True' },
+            { key: 'in_channels', label: 'IN CHANNELS', type: 'number', default: 6 },
+            { key: 'num_frames', label: 'NUM FRAMES', type: 'number', default: 1 },
+            { key: 'drop_path_rate', label: 'DROP PATH RATE', type: 'text', default: '0.3' },
+            { key: 'window_size', label: 'WINDOW SIZE', type: 'number', default: 8 }
+        ]
+    },
+    'ModelDecoder': {
+        title: 'Decoder',
+        color: '#8b5cf6', // Violet 500
+        inputs: [],
+        outputs: ['decoder_config'],
+        params: [
+            { key: 'decoder_name', label: 'DECODER', type: 'select', options: ['UperNetDecoder', 'FCNDecoder', 'IdentityDecoder'], default: 'UperNetDecoder' },
+            { key: 'decoder_channels', label: 'CHANNELS', type: 'number', default: 256 },
+            { key: 'scale_modules', label: 'SCALE MODULES', type: 'select', options: ['True', 'False'], default: 'True' }
+        ]
+    },
+    'ModelHead': {
+        title: 'Task Head',
+        color: '#a78bfa', // Violet 400
+        inputs: [],
+        outputs: ['head_config'],
+        params: [
+            { key: 'dropout', label: 'DROPOUT', type: 'text', default: '0.1' },
+            { key: 'learned_upscale_layers', label: 'UPSCALE LAYERS', type: 'number', default: 1 },
+            { key: 'final_act', label: 'FINAL ACTIVATION', type: 'select', options: ['None', 'ReLU', 'Sigmoid', 'Tanh'], default: 'None' }
+        ]
+    },
+    'ModelNeck': {
+        title: 'Model Neck',
+        color: '#8b5cf6', // Violet 500
+        inputs: [],
+        outputs: ['neck_config'],
+        params: [
+            { key: 'indices', label: 'INDICES (comma-sep)', type: 'text', default: '2,5,8,11' },
+            { key: 'reshape', label: 'RESHAPE TOKENS', type: 'select', options: ['True', 'False'], default: 'True' }
+        ]
+    },
+    'ModelFactory': {
+        title: 'Model Factory',
+        color: '#5b21b6', // Violet 800 (Darker main node)
+        inputs: ['backbone', 'decoder', 'head', 'neck'],
+        outputs: ['model_args'], 
+        params: [
+             // Keeps simple default behavior if nothing connected, or simple params?
+             // To enforce modularity, let's keep params empty or minimal.
+             // But for backward compatibility/simplicity, maybe provide defaults? 
+             // Let's assume input-driven for now.
+        ]
+    },
+    // [TILED INFERENCE] - Violet Theme (Darker)
+    'TiledInference': {
+        title: 'Tiled Inference',
+        color: '#6d28d9', // Violet 700
+        inputs: [],
+        outputs: ['tiled_inference'],
+        params: [
+             { key: 'h_crop', label: 'H CROP', type: 'number', default: 224 },
+             { key: 'w_crop', label: 'W CROP', type: 'number', default: 224 },
+             { key: 'h_stride', label: 'H STRIDE', type: 'number', default: 192 },
+             { key: 'w_stride', label: 'W STRIDE', type: 'number', default: 192 },
+             { key: 'average_patches', label: 'AVG PATCHES', type: 'select', options: ['True', 'False'], default: 'True' }
         ]
     },
     // [OPTIMIZER] - Amber Theme
+    // [OPTIMIZER & SCHEDULER] - Amber Theme
     'OptimizerConfig': {
         title: 'Optimizer',
         color: '#f59e0b', // Amber 500
         inputs: [],
         outputs: ['optim_args'], 
         params: [
+            { key: 'type', label: 'TYPE', type: 'select', options: ['AdamW', 'SGD'], default: 'AdamW' },
             { key: 'lr', label: 'LEARNING RATE', type: 'text', default: '1e-4' },
-            { key: 'weight_decay', label: 'WEIGHT DECAY', type: 'text', default: '0.05' },
-            { key: 'type', label: 'OPTIMIZER TYPE', type: 'select', options: ['AdamW', 'SGD'], default: 'AdamW' }
+            { key: 'weight_decay', label: 'WEIGHT DECAY', type: 'text', default: '0.05' }
         ]
     },
+    'LRScheduler': {
+        title: 'LR Scheduler',
+        color: '#d97706', // Amber 600
+        inputs: [],
+        outputs: ['scheduler_args'],
+        params: [
+            { key: 'type', label: 'TYPE', type: 'select', options: ['ReduceLROnPlateau', 'CosineAnnealingLR'], default: 'ReduceLROnPlateau' },
+            { key: 'monitor', label: 'MONITOR (Plateau)', type: 'text', default: 'val/loss' },
+            { key: 't_max', label: 'T_MAX (Cosine)', type: 'number', default: 50 },
+            { key: 'patience', label: 'PATIENCE (Plateau)', type: 'number', default: 10 }
+        ]
+    },
+    // [TASK] - Orange Theme
     // [TASK] - Orange Theme
     'SegmentationTask': {
         title: 'Segmentation Task',
         color: '#f97316', // Orange 500
-        inputs: ['model_args', 'optim_args'], 
+        inputs: ['model_args', 'optim_args', 'scheduler_args', 'tiled_inference'],
         outputs: ['task'], 
         params: [
             { key: 'loss', label: 'LOSS FUNCTION', type: 'select', options: ['ce', 'dice', 'focal'], default: 'ce' },
             { key: 'num_classes', label: 'NUM CLASSES', type: 'number', default: 2 },
-            { key: 'ignore_index', label: 'IGNORE INDEX', type: 'number', default: -1 }
+            { key: 'ignore_index', label: 'IGNORE INDEX', type: 'number', default: -1 },
+            { key: 'model_factory', label: 'FACTORY', type: 'select', options: ['EncoderDecoderFactory', 'PrithviModelFactory'], default: 'EncoderDecoderFactory' }
+        ]
+    },
+    'PixelwiseRegressionTask': {
+        title: 'Regression Task',
+        color: '#f97316', // Orange 500
+        inputs: ['model_args', 'optim_args', 'scheduler_args', 'tiled_inference'], 
+        outputs: ['task'], 
+        params: [
+            { key: 'loss', label: 'LOSS FUNCTION', type: 'select', options: ['rmse', 'mae', 'huber'], default: 'rmse' },
+            { key: 'ignore_index', label: 'IGNORE INDEX', type: 'number', default: -1 },
+            { key: 'model_factory', label: 'FACTORY', type: 'select', options: ['PrithviModelFactory', 'EncoderDecoderFactory'], default: 'PrithviModelFactory' }
         ]
     },
     // [LOGGER] - Pink Theme

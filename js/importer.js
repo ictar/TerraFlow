@@ -34,6 +34,15 @@ function reconstructGraph(config, silent = false) {
     svgLayer.innerHTML = '';
 
     try {
+        // 1.5 Restore Global Config
+        if (config.experiment_name) {
+            state.globalConfig.experiment_name = config.experiment_name;
+        }
+        if (config.seed_everything !== undefined) {
+            state.globalConfig.seed_everything = config.seed_everything;
+        }
+        updateGlobalUI();
+
         // 2. Parse & Create Nodes using initialData
         
         // --- Trainer ---
@@ -178,35 +187,122 @@ function reconstructGraph(config, silent = false) {
         // --- Model / Task ---
         let taskNode;
         let modelFactoryNode;
+        let tiledNode;
+
         if (config.model) {
             const init = config.model.init_args || {};
+            const classPath = config.model.class_path || '';
+            
+            // Task Type Detection
+            let taskType = 'SegmentationTask';
+            if (classPath.includes('PixelwiseRegressionTask')) taskType = 'PixelwiseRegressionTask';
+            
             const taskData = {
                  loss: init.loss,
                  ignore_index: init.ignore_index,
-                 num_classes: (init.model_args || {}).num_classes
+                 num_classes: (init.model_args || {}).num_classes,
+                 model_factory: init.model_factory // might be string
             };
-            taskNode = addNode('SegmentationTask', 500, 220, taskData);
+            taskNode = addNode(taskType, 500, 220, taskData);
             
+            // Model Args (Factory) - Modular Reconstruction
             if (init.model_args) {
-                const modelData = {
-                    backbone: init.model_args.backbone,
-                    pretrained: init.model_args.backbone_pretrained === false ? 'False' : 'True'
+                const ma = init.model_args;
+                
+                // 1. Create ModelFactory (The HUB)
+                // It now takes inputs, so we don't pass much data to it directly
+                modelFactoryNode = addNode('ModelFactory', 100, 200, {});
+
+                // 2. Create Backbone Node
+                const backboneData = {
+                    model_name: ma.backbone,
+                    pretrained: ma.backbone_pretrained === false ? 'False' : 'True',
+                    in_channels: ma.in_channels,
+                    num_frames: ma.num_frames,
+                    drop_path_rate: ma.backbone_drop_path_rate,
+                    window_size: ma.backbone_window_size
                 };
-                modelFactoryNode = addNode('ModelFactory', 100, 150, modelData);
+                const backboneNode = addNode('ModelBackbone', -250, 100, backboneData);
+                state.connections.push({ sourceNode: backboneNode.id, sourcePort: 'backbone_config', targetNode: modelFactoryNode.id, targetPort: 'backbone' });
+
+                // 3. Create Decoder Node
+                if (ma.decoder) {
+                    const decoderData = {
+                        decoder_name: ma.decoder,
+                        decoder_channels: ma.decoder_channels,
+                        scale_modules: ma.decoder_scale_modules === false ? 'False' : 'True'
+                    };
+                    const decoderNode = addNode('ModelDecoder', -250, 250, decoderData);
+                    state.connections.push({ sourceNode: decoderNode.id, sourcePort: 'decoder_config', targetNode: modelFactoryNode.id, targetPort: 'decoder' });
+                }
+
+                // 4. Create Head Node
+                if (ma.head_dropout !== undefined || ma.head_learned_upscale_layers !== undefined) {
+                    const headData = {
+                        dropout: ma.head_dropout,
+                        learned_upscale_layers: ma.head_learned_upscale_layers,
+                        final_act: ma.head_final_act ? ma.head_final_act.replace('torch.nn.', '') : 'None' 
+                    };
+                    const headNode = addNode('ModelHead', -250, 400, headData);
+                    state.connections.push({ sourceNode: headNode.id, sourcePort: 'head_config', targetNode: modelFactoryNode.id, targetPort: 'head' });
+                }
+
+                // 5. Create Neck Node (Check if explicit necks are defined)
+                if (Array.isArray(ma.necks) && ma.necks.length > 0) {
+                     // Check if it's the default auto-gen or a custom one
+                     // Simple heuristic: If it has 'SelectIndices', we try to visualize it
+                     const selectIndicesNeck = ma.necks.find(n => n.name === 'SelectIndices');
+                     const reshapeNeck = ma.necks.find(n => n.name === 'ReshapeTokensToImage');
+                     
+                     if (selectIndicesNeck) {
+                         const neckData = {
+                             indices: (selectIndicesNeck.indices || []).join(','),
+                             reshape: reshapeNeck ? 'True' : 'False'
+                         };
+                         const neckNode = addNode('ModelNeck', -250, 550, neckData);
+                         state.connections.push({ sourceNode: neckNode.id, sourcePort: 'neck_config', targetNode: modelFactoryNode.id, targetPort: 'neck' });
+                     }
+                }
+            }
+            
+            // Tiled Inference
+            if (init.tiled_inference_parameters) {
+                const ti = init.tiled_inference_parameters;
+                const tiledData = {
+                    h_crop: ti.h_crop,
+                    w_crop: ti.w_crop,
+                    h_stride: ti.h_stride,
+                    w_stride: ti.w_stride,
+                    average_patches: ti.average_patches ? 'True' : 'False'
+                };
+                tiledNode = addNode('TiledInference', 100, 600, tiledData);
             }
         }
 
         // --- Optimizer ---
         let optimNode;
-        if (config.optimizer) {
-            const init = config.optimizer.init_args || {};
-            const type = config.optimizer.class_path ? config.optimizer.class_path.split('.').pop() : 'AdamW';
+        if(config.optimizer) {
+            const optInit = config.optimizer.init_args || {};
             const optimData = {
-                lr: init.lr,
-                weight_decay: init.weight_decay,
-                type: ['AdamW', 'SGD'].includes(type) ? type : 'AdamW'
+                type: config.optimizer.class_path.includes('SGD') ? 'SGD' : 'AdamW',
+                lr: optInit.lr,
+                weight_decay: optInit.weight_decay
             };
-            optimNode = addNode('OptimizerConfig', 100, 380, optimData);
+            optimNode = addNode('OptimizerConfig', 100, 900, optimData); 
+        }
+
+        // LR Scheduler
+        let schedulerNode = null;
+        if (config.lr_scheduler) {
+            const schedInit = config.lr_scheduler.init_args || {};
+            const schedType = config.lr_scheduler.class_path.includes('Plateau') ? 'ReduceLROnPlateau' : 'CosineAnnealingLR';
+            const schedData = {
+                type: schedType,
+                monitor: schedInit.monitor || 'val/loss',
+                patience: schedInit.patience || 10,
+                t_max: schedInit.T_max || 50
+            };
+            schedulerNode = addNode('LRScheduler', 100, 1050, schedData);
         }
 
         // 3. Reconnect
@@ -218,6 +314,9 @@ function reconstructGraph(config, silent = false) {
         if (optimNode && taskNode) {
             state.connections.push({ sourceNode: optimNode.id, sourcePort: 'optim_args', targetNode: taskNode.id, targetPort: 'optim_args' });
         }
+        if (schedulerNode && taskNode) {
+            state.connections.push({ sourceNode: schedulerNode.id, sourcePort: 'scheduler_args', targetNode: taskNode.id, targetPort: 'scheduler_args' });
+        }
         if (taskNode && trainerNode) {
             state.connections.push({ sourceNode: taskNode.id, sourcePort: 'task', targetNode: trainerNode.id, targetPort: 'task' });
         }
@@ -226,6 +325,9 @@ function reconstructGraph(config, silent = false) {
         }
         if (loggerNode && trainerNode) {
              state.connections.push({ sourceNode: loggerNode.id, sourcePort: 'logger', targetNode: trainerNode.id, targetPort: 'logger' });
+        }
+        if (tiledNode && taskNode) {
+             state.connections.push({ sourceNode: tiledNode.id, sourcePort: 'tiled_inference', targetNode: taskNode.id, targetPort: 'tiled_inference' });
         }
         if (createdCallbackNodes.length > 0 && trainerNode) {
              createdCallbackNodes.forEach(cbNode => {

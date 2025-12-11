@@ -11,6 +11,7 @@ const state = {
     
     // Global Config
     globalConfig: {
+        experiment_name: 'my_experiment',
         seed_everything: 0
     }
 };

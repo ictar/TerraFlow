@@ -156,97 +156,180 @@ function buildCLIConfig() {
         });
     }
 
-    const cliConfig = {
-        seed_everything: state.globalConfig.seed_everything,
-        trainer: {
-            accelerator: trainerNode.data.accelerator,
-            strategy: trainerNode.data.strategy,
-            devices: trainerNode.data.devices === 'auto' ? 'auto' : (parseInt(trainerNode.data.devices) || trainerNode.data.devices),
-            num_nodes: parseInt(trainerNode.data.num_nodes),
-            precision: trainerNode.data.precision,
-            precision: trainerNode.data.precision,
-            logger: (() => {
-                if (!loggerNode) return null;
-                const type = loggerNode.data.type;
-                const args = { save_dir: loggerNode.data.save_dir, name: loggerNode.data.name };
-                
-                let classPath = "lightning.pytorch.loggers.TensorBoardLogger";
-                if (type === 'Wandb') {
-                    classPath = "lightning.pytorch.loggers.WandbLogger";
-                    args.project = loggerNode.data.project;
-                    args.log_model = true;
-                } else if (type === 'CSV') {
-                    classPath = "lightning.pytorch.loggers.CSVLogger";
-                } else if (type === 'MLFlow') {
-                    classPath = "lightning.pytorch.loggers.MLFlowLogger";
-                    args.experiment_name = loggerNode.data.project;
-                    args.run_name = loggerNode.data.name;
-                    delete args.name; // MLFlow uses run_name
-                }
-                
-                return {
-                    class_path: classPath,
-                    init_args: args
-                };
-            })(),
-            callbacks: callbacks,
-            max_epochs: parseInt(trainerNode.data.max_epochs),
-            check_val_every_n_epoch: parseInt(trainerNode.data.check_val_every_n_epoch),
-            log_every_n_steps: parseInt(trainerNode.data.log_every_n_steps),
-            enable_checkpointing: trainerNode.data.enable_checkpointing === 'True',
-            default_root_dir: trainerNode.data.default_root_dir
-        },
-        data: {
-            class_path: dataNode.data.class_path,
-            init_args: {
-                data_root: dataNode.data.data_root,
-                batch_size: parseInt(dataNode.data.batch_size),
-                num_workers: parseInt(dataNode.data.num_workers),
-                // Common args usually needed for these datamodules
-                constant_scale: parseFloat(dataNode.data.constant_scale),
-                no_data_replace: parseInt(dataNode.data.no_data_replace),
-                no_label_replace: parseInt(dataNode.data.no_label_replace),
-                use_metadata: dataNode.data.use_metadata === 'True',
-                bands: bands,
-                train_transform: gatherTransforms(dataNode.id, 'train_transform'),
-                val_transform: gatherTransforms(dataNode.id, 'val_transform'),
-                test_transform: gatherTransforms(dataNode.id, 'test_transform')
-            }
-        },
-        model: {
-            class_path: `terratorch.tasks.${taskNode.type.replace('SegmentationTask', 'SemanticSegmentationTask')}`,
-            init_args: {
-                model_args: {
-                    backbone_pretrained: modelNode ? (modelNode.data.pretrained === 'True') : true,
-                    backbone: backbone,
-                    decoder: "UperNetDecoder",
-                    decoder_channels: 256,
-                    decoder_scale_modules: true,
-                    num_classes: parseInt(taskNode.data.num_classes),
-                    rescale: true,
-                    backbone_bands: bands,
-                    head_dropout: 0.1,
-                    necks: necks
-                },
-                loss: taskNode.data.loss,
-                ignore_index: parseInt(taskNode.data.ignore_index),
-                freeze_backbone: false,
-                freeze_decoder: false,
-                model_factory: "EncoderDecoderFactory"
-            }
-        },
-        optimizer: optimNode ? {
-            class_path: `torch.optim.${optimNode.data.type}`,
-            init_args: {
-                lr: parseFloat(optimNode.data.lr),
-                weight_decay: parseFloat(optimNode.data.weight_decay)
-            }
-        } : {},
-        lr_scheduler: {
-            class_path: "CosineAnnealingLR",
-            init_args: { T_max: parseInt(trainerNode.data.max_epochs) }
+    // Define loggerConfig
+    let loggerConfig = null;
+    if (loggerNode) {
+        const type = loggerNode.data.type;
+        const args = { save_dir: loggerNode.data.save_dir, name: loggerNode.data.name };
+        
+        let classPath = "lightning.pytorch.loggers.TensorBoardLogger"; // Default
+        if (type === 'CSVLogger') {
+            classPath = "lightning.pytorch.loggers.CSVLogger";
+        } else if (type === 'WandbLogger') {
+            classPath = "lightning.pytorch.loggers.WandbLogger";
+            // Add project, entity if available
+            if (loggerNode.data.project) args.project = loggerNode.data.project;
+            if (loggerNode.data.entity) args.entity = loggerNode.data.entity;
         }
-    };
+        loggerConfig = { class_path: classPath, init_args: args };
+    }
+
+    // Define callbackConfigs
+    const callbackConfigs = callbacks.length > 0 ? callbacks : null;
+
+    // --- 6. Construct CLI Config ---
+    const taskClass = taskNode.type === 'PixelwiseRegressionTask' 
+        ? 'terratorch.tasks.PixelwiseRegressionTask'
+        : 'terratorch.tasks.SemanticSegmentationTask';
+
+        // --- 5. Tiled Inference ---
+        let tiledNode = null;
+        if (taskNode) {
+            tiledNode = findAllInputs(taskNode.id, 'tiled_inference')[0];
+        }
+
+        // --- 6. Model factory Inputs (Backbone, Decoder, Head, Neck) ---
+        let backboneNode = null, decoderNode = null, headNode = null, neckNode = null;
+        if (modelNode) {
+            backboneNode = findAllInputs(modelNode.id, 'backbone')[0];
+            decoderNode = findAllInputs(modelNode.id, 'decoder')[0];
+            headNode = findAllInputs(modelNode.id, 'head')[0];
+            neckNode = findAllInputs(modelNode.id, 'neck')[0];
+        }
+
+        // Helper: Construct Necks
+        let necksConfig = [];
+        if (neckNode) {
+            // User connected a Neck node (Explicit Config)
+            const indices = neckNode.data.indices.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            necksConfig.push({ name: 'SelectIndices', indices: indices });
+            if (neckNode.data.reshape === 'True') {
+                necksConfig.push({ name: 'ReshapeTokensToImage' });
+            }
+        } else {
+            // Default behavior if no Neck connected but using Prithvi
+            necksConfig = getNecksForBackbone(backboneNode ? backboneNode.data.model_name : 'prithvi_eo_v1_100');
+        }
+
+        // --- 7. LR Scheduler ---
+        const schedulerNode = findAllInputs(taskNode.id, 'scheduler_args')[0];
+        let schedulerConfig = null;
+        if (schedulerNode) {
+            if (schedulerNode.data.type === 'ReduceLROnPlateau') {
+                schedulerConfig = {
+                    class_path: 'ReduceLROnPlateau',
+                    init_args: {
+                        monitor: schedulerNode.data.monitor,
+                        patience: parseInt(schedulerNode.data.patience),
+                        mode: 'min' 
+                    }
+                };
+            } else {
+                schedulerConfig = {
+                     class_path: 'CosineAnnealingLR',
+                     init_args: {
+                         T_max: parseInt(schedulerNode.data.t_max)
+                     }
+                };
+            }
+        } else {
+            // Fallback default
+            schedulerConfig = {
+                class_path: "CosineAnnealingLR",
+                init_args: {
+                    T_max: parseInt(trainerNode.data.max_epochs)
+                }
+            };
+        }
+
+        const cliConfig = {
+            experiment_name: state.globalConfig.experiment_name || 'my_experiment',
+            seed_everything: state.globalConfig.seed_everything,
+            trainer: {
+                accelerator: trainerNode.data.accelerator,
+                strategy: trainerNode.data.strategy,
+                devices: trainerNode.data.devices === 'auto' ? 'auto' : (parseInt(trainerNode.data.devices) || trainerNode.data.devices),
+                num_nodes: parseInt(trainerNode.data.num_nodes),
+                precision: trainerNode.data.precision,
+                logger: loggerConfig,
+                callbacks: callbackConfigs,
+                max_epochs: parseInt(trainerNode.data.max_epochs),
+                check_val_every_n_epoch: parseInt(trainerNode.data.check_val_every_n_epoch),
+                log_every_n_steps: parseInt(trainerNode.data.log_every_n_steps),
+                enable_checkpointing: trainerNode.data.enable_checkpointing === 'True',
+                default_root_dir: trainerNode.data.default_root_dir
+            },
+            data: {
+                class_path: dataNode.data.class_path,
+                init_args: {
+                    data_root: dataNode.data.data_root,
+                    batch_size: parseInt(dataNode.data.batch_size),
+                    num_workers: parseInt(dataNode.data.num_workers),
+                    constant_scale: parseFloat(dataNode.data.constant_scale),
+                    no_data_replace: parseInt(dataNode.data.no_data_replace),
+                    no_label_replace: parseInt(dataNode.data.no_label_replace),
+                    use_metadata: dataNode.data.use_metadata === 'True',
+                    bands: bands,
+                    train_transform: gatherTransforms(dataNode.id, 'train_transform'),
+                    val_transform: gatherTransforms(dataNode.id, 'val_transform'),
+                    test_transform: gatherTransforms(dataNode.id, 'test_transform')
+                }
+            },
+            model: {
+                class_path: taskClass,
+                init_args: {
+                    model_args: {
+                        // Backbone Args
+                        backbone: backboneNode ? backboneNode.data.model_name : 'prithvi_eo_v1_100',
+                        backbone_pretrained: backboneNode ? (backboneNode.data.pretrained === 'True') : true,
+                        backbone_bands: bands, 
+                        in_channels: backboneNode ? parseInt(backboneNode.data.in_channels) : 6,
+                        num_frames: backboneNode ? parseInt(backboneNode.data.num_frames) : 1,
+                        backbone_drop_path_rate: backboneNode ? parseFloat(backboneNode.data.drop_path_rate) : 0.0,
+                        backbone_window_size: backboneNode ? parseInt(backboneNode.data.window_size) : 8,
+                        
+                        // Decoder Args
+                        decoder: decoderNode ? decoderNode.data.decoder_name : 'UperNetDecoder',
+                        decoder_channels: decoderNode ? parseInt(decoderNode.data.decoder_channels) : 256,
+                        decoder_scale_modules: decoderNode ? (decoderNode.data.scale_modules === 'True') : true,
+                        
+                        // Head Args
+                        head_dropout: headNode ? parseFloat(headNode.data.dropout) : 0.1,
+                        head_learned_upscale_layers: headNode ? parseInt(headNode.data.learned_upscale_layers) : 1,
+                        head_final_act: (headNode && headNode.data.final_act !== 'None') ? `torch.nn.${headNode.data.final_act}` : undefined,
+
+                        // Task Specific + Necks
+                        num_classes: taskNode.data.num_classes ? parseInt(taskNode.data.num_classes) : undefined,
+                        rescale: true,
+                        necks: necksConfig 
+                    },
+                    loss: taskNode.data.loss,
+                    ignore_index: parseInt(taskNode.data.ignore_index),
+                    freeze_backbone: false, 
+                    freeze_decoder: false,
+                    model_factory: taskNode.data.model_factory || 'EncoderDecoderFactory'
+                }
+            },
+            optimizer: optimNode ? {
+                class_path: optimNode.data.type === 'SGD' ? 'torch.optim.SGD' : 'torch.optim.AdamW',
+                init_args: {
+                    lr: parseFloat(optimNode.data.lr),
+                    weight_decay: parseFloat(optimNode.data.weight_decay)
+                }
+            } : {},
+            lr_scheduler: schedulerConfig
+        };
+
+    // Add Tiled Inference if connected
+    if (tiledNode) {
+        cliConfig.model.init_args.tiled_inference_parameters = {
+            h_crop: parseInt(tiledNode.data.h_crop),
+            w_crop: parseInt(tiledNode.data.w_crop),
+            h_stride: parseInt(tiledNode.data.h_stride),
+            w_stride: parseInt(tiledNode.data.w_stride),
+            average_patches: tiledNode.data.average_patches === 'True'
+        };
+    }
     
     // Cleanup nulls
     if (!cliConfig.trainer.logger) delete cliConfig.trainer.logger;

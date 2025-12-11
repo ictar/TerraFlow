@@ -317,64 +317,125 @@ function resetView() {
 }
 
 function autoLayout() {
-    // 1. Build Graph & In-Degrees
-    const graph = new Map();
-    const inDegree = new Map();
+    // 1. Build Adjacency & Reverse Adjacency
+    const adj = new Map(); // ID -> [TargetIDs]
+    const revAdj = new Map(); // ID -> [SourceIDs]
+    const outDegree = new Map();
+    
     state.nodes.forEach(node => {
-         graph.set(node.id, []);
-         inDegree.set(node.id, 0);
+         adj.set(node.id, []);
+         revAdj.set(node.id, []);
+         outDegree.set(node.id, 0);
     });
 
     state.connections.forEach(conn => {
-        // Directed edge: source -> target
-        const adj = graph.get(conn.sourceNode) || [];
-        adj.push(conn.targetNode);
-        graph.set(conn.sourceNode, adj);
-        
-        inDegree.set(conn.targetNode, (inDegree.get(conn.targetNode) || 0) + 1);
+        adj.get(conn.sourceNode).push(conn.targetNode);
+        revAdj.get(conn.targetNode).push(conn.sourceNode);
+        outDegree.set(conn.sourceNode, outDegree.get(conn.sourceNode) + 1);
     });
 
-    // 2. Assign Levels (Longest path from source)
-    // Initialize levels
-    const levels = new Map();
-    state.nodes.forEach(n => levels.set(n.id, 0));
+    // 2. Compute Depth from Sinks (Longest Path to Sink)
+    // Sinks are nodes with outDegree 0 (usually Trainer)
+    const depthFromSink = new Map();
+    
+    // Initialize depths to -1
+    state.nodes.forEach(n => depthFromSink.set(n.id, -1));
 
-    // Simple robust leveling: iterate |N| times relax edges
-    // This handles any acyclic graph correctly without complex topological sort impl
-    for (let i = 0; i < state.nodes.length + 2; i++) {
-        state.connections.forEach(conn => {
-            const srcLvl = levels.get(conn.sourceNode);
-            const tgtLvl = levels.get(conn.targetNode);
-            if (srcLvl + 1 > tgtLvl) {
-                levels.set(conn.targetNode, srcLvl + 1);
-            }
+    function getDepth(nodeId, visited = new Set()) {
+        if (visited.has(nodeId)) return 0; // Cycle detected or visited
+        if (depthFromSink.get(nodeId) !== -1) return depthFromSink.get(nodeId);
+
+        visited.add(nodeId);
+        
+        const targets = adj.get(nodeId);
+        if (targets.length === 0) {
+            depthFromSink.set(nodeId, 0);
+            visited.delete(nodeId);
+            return 0;
+        }
+
+        let maxChildDepth = 0;
+        targets.forEach(tId => {
+            maxChildDepth = Math.max(maxChildDepth, getDepth(tId, visited));
         });
+
+        const d = maxChildDepth + 1;
+        depthFromSink.set(nodeId, d);
+        visited.delete(nodeId);
+        return d;
     }
 
-    // 3. Group Nodes by Level
-    const levelGroups = new Map();
-    levels.forEach((lvl, id) => {
-        if (!levelGroups.has(lvl)) levelGroups.set(lvl, []);
-        levelGroups.get(lvl).push(id);
+    let maxGraphDepth = 0;
+    state.nodes.forEach(n => {
+        const d = getDepth(n.id);
+        if (d > maxGraphDepth) maxGraphDepth = d;
+    });
+
+    // 3. Group Nodes by Column (Forward Level)
+    // Column = MaxDepth - DepthFromSink
+    // This aligns sinks to the right, and pushes inputs to the left based on how many steps away they are.
+    const columns = new Map();
+    state.nodes.forEach(n => {
+        const col = maxGraphDepth - depthFromSink.get(n.id);
+        if (!columns.has(col)) columns.set(col, []);
+        columns.get(col).push(n.id);
     });
 
     // 4. Assign Grid Positions
     const START_X = 50;
-    const START_Y = 100;
-    const COL_WIDTH = 320; // Tighter column width
-    const NODE_GAP = 40;   // Vertical gap between nodes
+    const START_Y = 80;
+    const COL_WIDTH = 340; 
+    const NODE_GAP = 30;
 
-    // Sort keys to process left-to-right
-    const sortedLevels = Array.from(levelGroups.keys()).sort((a,b) => a - b);
-    
-    sortedLevels.forEach(lvl => {
-        const nodeIds = levelGroups.get(lvl);
+    // Y-Sorting Priority (Architectural Tiering)
+    const TYPE_PRIORITY = {
+        // Tier 1: Model Components (Absolute Top)
+        'ModelBackbone': 1,
+        'ModelNeck': 2,
+        'ModelDecoder': 3,
+        'ModelHead': 4,
+
+        // Tier 2: Model Aggregation & Architecture
+        'ModelFactory': 10,
+        'TiledInference': 11,
+        'OptimizerConfig': 12, 
+        'LRScheduler': 12, // Same tier as Optimizer
         
-        // Sort nodes in layer by type to keep graph organized
+        // Tier 3: Task (High-Mid)
+        'SegmentationTask': 20,
+        'PixelwiseRegressionTask': 20,
+        
+        // Tier 3: Data (Mid)
+        'DataModule': 30,
+        
+        // Tier 4: Transforms (Low-Mid - usually feed into Data)
+        'AlbumentationsResize': 40,
+        'AlbumentationsHorizontalFlip': 41,
+        'AlbumentationsVerticalFlip': 41,
+        'ToTensorV2': 42,
+
+        // Tier 5: Trainer & Infrastructure (Bottom)
+        'TrainerConfig': 50,
+        'Logger': 51,
+        'EarlyStopping': 52,
+        'ModelCheckpoint': 52,
+        'LearningRateMonitor': 52,
+        'RichProgressBar': 53
+    };
+
+    const sortedCols = Array.from(columns.keys()).sort((a,b) => a - b);
+    
+    sortedCols.forEach(colIdx => {
+        const nodeIds = columns.get(colIdx);
+        
+        // Sort by Type Priority then ID
         nodeIds.sort((a, b) => {
              const nA = state.nodes.find(n => n.id === a);
              const nB = state.nodes.find(n => n.id === b);
-             return nA.type.localeCompare(nB.type);
+             const pA = TYPE_PRIORITY[nA.type] || 99;
+             const pB = TYPE_PRIORITY[nB.type] || 99;
+             if (pA !== pB) return pA - pB;
+             return nA.id.localeCompare(nB.id);
         });
 
         let currentY = START_Y;
@@ -384,7 +445,7 @@ function autoLayout() {
             if (!node) return;
 
             // Set Position
-            node.x = START_X + lvl * COL_WIDTH;
+            node.x = START_X + colIdx * COL_WIDTH;
             node.y = currentY;
 
             // DOM Update
@@ -394,24 +455,16 @@ function autoLayout() {
                 el.style.top = node.y + 'px';
             }
 
-            // Estimate Node Height for next position
-            // Base: ~50px (header) + Padding
-            // Params: ~50px each (label + input)
-            // Ports: ~24px each
+            // Estimate Node Height
             const typeDef = NODE_TYPES[node.type] || {};
             const paramCount = (typeDef.params || []).length;
             const inputCount = (typeDef.inputs || []).length;
             const outputCount = (typeDef.outputs || []).length;
-            const socketRows = Math.max(inputCount, outputCount) + (inputCount > 0 && outputCount > 0 ? 0 : 0); // Rough est
             
             // Refined estimation
-            // Header: 40
-            // Params: 60 * paramCount
-            // Sockets: 30 * (input + output) -- actually they are stacked unless specific logic
-            // ui.js addNode logic: inputs, then outputs, then params.
-            // Let's assume sequential stacking for safety.
-            
-            const estimatedHeight = 60 + (paramCount * 60) + (inputCount * 30) + (outputCount * 30);
+            // Header: 40, Params: ~54 (with label), Sockets: ~28
+            // Compact mode calculation
+            const estimatedHeight = 44 + (paramCount * 54) + (inputCount * 28) + (outputCount * 28);
             
             currentY += estimatedHeight + NODE_GAP;
         });
@@ -419,6 +472,7 @@ function autoLayout() {
 
     renderConnections();
     state.zoom = 1;
+    state.pan = { x: 0, y: 0 }; // Center view roughly
     render();
 }
 
@@ -427,6 +481,8 @@ function autoLayout() {
 function updateGlobalSetting(key, value) {
     if (key === 'seed_everything') {
         state.globalConfig.seed_everything = parseInt(value) || 0;
+    } else if (key === 'experiment_name') {
+        state.globalConfig.experiment_name = value;
     }
 }
 
@@ -434,6 +490,10 @@ function updateGlobalUI() {
     const seedEl = document.getElementById('global-seed');
     if (seedEl) {
         seedEl.value = state.globalConfig.seed_everything;
+    }
+    const nameEl = document.getElementById('global-experiment-name');
+    if (nameEl) {
+        nameEl.value = state.globalConfig.experiment_name || 'my_experiment';
     }
 }
 

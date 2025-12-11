@@ -6,20 +6,24 @@
 
 ## ✨ Features
 
-- 🎨 **Visual Workflow**: Drag-and-drop interface inspired by ComfyUI/SVP. Modular CSS/JS structure for easy maintenance.
+- 🧩 **Modular Architecture**:
+    - **Granular Control**: Build models component-by-component using **Backbone**, **Neck**, **Decoder**, and **Head** nodes.
+    - **Model Factory**: Central hub to assemble custom architectures.
 - 🔌 **Terratorch Native**: First-class support for Terratorch components:
-    - **Models**: Prithvi (100M, 300M), Clay, SatMAE, ScaleMAE, Swin, ResNet, etc.
-    - **Tasks**: Segmentation, Pixel-wise Regression.
+    - **Models**: Prithvi (100M, 300M, 600M), Clay, SatMAE, ScaleMAE, Swin, ResNet, etc.
+    - **Tasks**: Semantic Segmentation, Pixel-wise Regression.
+    - **Inference**: Tiled Inference support with configurable crop/stride.
     - **Data**: Generic DataModules (Sen1Floods11, Landsat, Geo/Non-Geo) with custom `data_root`.
     - **Transforms**: Visual pipeline for Albumentations (Resize, Flip, ToTensor), ordered spatially.
 - 🧠 **Advanced Config**:
+    - **Optimization**: Configurable **LR Scheduler** (ReduceLROnPlateau, CosineAnnealingLR) and **Optimizer** (AdamW, SGD).
     - **Multiple Callbacks**: Early Stopping, Model Checkpoint, LR Monitor, Rich Progress Bar.
     - **Flexible Logging**: TensorBoard, Wandb, CSV, MLFlow.
-    - **Global Settings**: Centralized management for random seeds and environment configs.
+    - **Global Settings**: Experiment naming and centralized random seed management.
 - 🔄 **Re-Layout & Import**:
-    - **Import YAML**: Load existing `.yaml` configuration files and reconstruct the visual graph instantly.
-    - **Auto Layout**: One-click graph organization to untangle complex pipelines.
-- 🚀 **Export**: Compiles to standardized `.ipynb` notebooks or raw `.yaml` configs.
+    - **Import YAML**: Load existing `.yaml` configuration files and reconstruct the visual graph instantly, preserving modular connections.
+    - **Auto Layout**: Smart "Sink-based" organizing algorithm for perfect clean diagrams.
+- 🚀 **Export**: Compiles to standard `.ipynb` notebooks or raw `.yaml` configs ready for CLI training.
 - 🔒 **Privacy First**: Runs 100% in your browser. No backend server required.
 
 ## 🚀 Getting Started
@@ -37,19 +41,19 @@ git clone https://github.com/ictar/TerraFlow.git
 
 ### Usage
 
-1. **Add Nodes**: Right-click canvas to add modules (Data, Models, Tasks) or specialized components (Loggers, Callbacks).
+1. **Add Nodes**: Right-click canvas to add modules. Use the organized menu (Architecture, Task, Data, Trainer).
 2. **Connect**: Drag from Output ports (Green) to Input ports (Blue).
 3. **Configure**:
-    - Tweak node parameters (Learning Rate, Backbones).
-    - Use the **Global Settings** panel (bottom-right) for Seed/Checkpoint config.
-    - Use the **Relayout** button (bottom-left) to organize messy graphs.
+    - Tweak node parameters.
+    - Use **Global Settings** (top-right) for Experiment Name and Seed.
+    - Use **Relayout** (bottom-left) to organize messy graphs.
 4. **Export**: Click export buttons (top-right) for `.ipynb` or `.yaml`.
 
 ## 🛠️ Architecture
 
 TerraFlow is now fully modularized:
-- `js/nodes.js`: Node definitions and schema.
-- `js/ui.js`: Rendering engine, interaction logic, and auto-layout.
+- `js/nodes.js`: Node definitions (Schema).
+- `js/ui.js`: Rendering engine, interaction logic, and "Sink-Based" auto-layout.
 - `js/compiler.js`: Logic to transpile the graph into Hydra/Lightning configs.
 - `js/importer.js`: Logic to parse YAML and reconstruct the graph.
 - `js/state.js`: Global state management.
@@ -59,8 +63,8 @@ TerraFlow is now fully modularized:
 - [x] Export to Jupyter Notebook & YAML
 - [x] **Import Functionality**: Load existing YAMLs.
 - [x] **Auto Layout**: Intelligent graph organization.
-- [x] **Advanced Callbacks & Loggers**: Full Lightning support.
-- [x] **Data Augmentation**: Visual Transforms pipeline.
+- [x] **Modular Architecture**: Backbone/Neck/Decoder/Head splitting.
+- [x] **Advanced Tasks**: Regression & Tiled Inference.
 - [ ] Custom Nodes: Define custom model architectures via UI.
 - [ ] Live Preview: Connect to a Python backend to preview dataset chips.
 
