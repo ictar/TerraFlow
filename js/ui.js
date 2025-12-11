@@ -133,13 +133,10 @@ function formatPortName(key) {
 
 // function renderConnections() { ... } // Removed duplicate definition here. Using the one defined at the bottom.
 
-function drawCurve(p1, p2, isTemp, connData = null) {
+function drawCurve(p1, p2, isTemp, connData = null, orderIndex = null) {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     // Dynamic Curvature:
-    // If nodes are far apart horizontally, start with a wide curve.
-    // If close or vertical, ensure enough "bulge" to look like a wire.
     const deltaX = Math.abs(p2.x - p1.x);
-    // Control point distance: at least 60px, or 50% of the horizontal distance
     const dist = Math.max(deltaX * 0.5, 60); 
     
     // Wire flow: always out to the right (p1 + dist) and in from the left (p2 - dist)
@@ -148,11 +145,8 @@ function drawCurve(p1, p2, isTemp, connData = null) {
     
     // Improve vertical handling: If going backwards (p2.x < p1.x), loop around
     if (p2.x < p1.x + 20) {
-        // Create a C-shape loop
         cp1.x = Math.max(p1.x + 200, p1.x + deltaX);
         cp2.x = Math.min(p2.x - 200, p2.x - deltaX);
-        // Push control points vertically apart to avoid cutting through nodes? 
-        // Simple cubic bezier is usually fine if CP range is wide enough.
     }
     
     const d = `M ${p1.x} ${p1.y} C ${cp1.x} ${cp1.y} ${cp2.x} ${cp2.y} ${p2.x} ${p2.y}`;
@@ -168,10 +162,12 @@ function drawCurve(p1, p2, isTemp, connData = null) {
         sourceNodeId = connData.sourceNode;
     }
     
+    let strokeColor = null;
     if (sourceNodeId) {
         const node = state.nodes.find(n => n.id === sourceNodeId);
         if (node && NODE_TYPES[node.type]) {
-            path.style.stroke = NODE_TYPES[node.type].color;
+            strokeColor = NODE_TYPES[node.type].color;
+            path.style.stroke = strokeColor;
         }
     }
     
@@ -186,6 +182,44 @@ function drawCurve(p1, p2, isTemp, connData = null) {
     }
     
     svgLayer.appendChild(path);
+
+    // Render Order Badge (if applicable)
+    if (orderIndex !== null) {
+        // Calculate Bezier midpoint (t = 0.5)
+        // B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 + 3(1-t) t^2 P2 + t^3 P3
+        const t = 0.5;
+        const mt = 1 - t; // 0.5
+        const mt2 = mt * mt; // 0.25
+        const mt3 = mt2 * mt; // 0.125
+        const t2 = t * t; // 0.25
+        const t3 = t2 * t; // 0.125
+
+        const midX = mt3 * p1.x + 3 * mt2 * t * cp1.x + 3 * mt * t2 * cp2.x + t3 * p2.x;
+        const midY = mt3 * p1.y + 3 * mt2 * t * cp1.y + 3 * mt * t2 * cp2.y + t3 * p2.y;
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('transform', `translate(${midX}, ${midY})`);
+        
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('r', '10');
+        circle.setAttribute('fill', strokeColor || '#555');
+        circle.setAttribute('stroke', '#121212');
+        circle.setAttribute('stroke-width', '2');
+        
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dy', '3'); // Vertical center adjustment
+        text.setAttribute('fill', '#fff');
+        text.setAttribute('font-size', '10px');
+        text.setAttribute('font-weight', 'bold');
+        text.textContent = orderIndex;
+
+        g.appendChild(circle);
+        g.appendChild(text);
+        g.style.pointerEvents = 'none'; // Click through to wire
+        
+        svgLayer.appendChild(g);
+    }
 }
 
 function getPortPosition(nodeId, portName, type) {
@@ -325,37 +359,33 @@ function autoLayout() {
     });
 
     // 4. Assign Grid Positions
-    const START_X = 100;
-    const START_Y = 150;
-    const COL_WIDTH = 380; // Wide enough for nodes
-    const ROW_HEIGHT = 400; // Tall enough for large nodes
+    const START_X = 50;
+    const START_Y = 100;
+    const COL_WIDTH = 320; // Tighter column width
+    const NODE_GAP = 40;   // Vertical gap between nodes
 
     // Sort keys to process left-to-right
     const sortedLevels = Array.from(levelGroups.keys()).sort((a,b) => a - b);
     
-    // Track vertical cursor per layer? No, just stack them.
-    // To vertically center, get max height of a column?
-    // Let's keep it simple: Top alignment for now.
-    
     sortedLevels.forEach(lvl => {
         const nodeIds = levelGroups.get(lvl);
         
-        // Optional: Sort nodes in layer by their Y position or type to keep graph stable?
-        // Or just alphabetical/type to look consistent
+        // Sort nodes in layer by type to keep graph organized
         nodeIds.sort((a, b) => {
              const nA = state.nodes.find(n => n.id === a);
              const nB = state.nodes.find(n => n.id === b);
-             // Heuristic: Input types on top? 
              return nA.type.localeCompare(nB.type);
         });
 
-        nodeIds.forEach((id, idx) => {
+        let currentY = START_Y;
+
+        nodeIds.forEach(id => {
             const node = state.nodes.find(n => n.id === id);
             if (!node) return;
 
-            // Animate? No, just set.
+            // Set Position
             node.x = START_X + lvl * COL_WIDTH;
-            node.y = START_Y + idx * ROW_HEIGHT;
+            node.y = currentY;
 
             // DOM Update
             const el = document.getElementById(node.id);
@@ -363,12 +393,31 @@ function autoLayout() {
                 el.style.left = node.x + 'px';
                 el.style.top = node.y + 'px';
             }
+
+            // Estimate Node Height for next position
+            // Base: ~50px (header) + Padding
+            // Params: ~50px each (label + input)
+            // Ports: ~24px each
+            const typeDef = NODE_TYPES[node.type] || {};
+            const paramCount = (typeDef.params || []).length;
+            const inputCount = (typeDef.inputs || []).length;
+            const outputCount = (typeDef.outputs || []).length;
+            const socketRows = Math.max(inputCount, outputCount) + (inputCount > 0 && outputCount > 0 ? 0 : 0); // Rough est
+            
+            // Refined estimation
+            // Header: 40
+            // Params: 60 * paramCount
+            // Sockets: 30 * (input + output) -- actually they are stacked unless specific logic
+            // ui.js addNode logic: inputs, then outputs, then params.
+            // Let's assume sequential stacking for safety.
+            
+            const estimatedHeight = 60 + (paramCount * 60) + (inputCount * 30) + (outputCount * 30);
+            
+            currentY += estimatedHeight + NODE_GAP;
         });
     });
 
     renderConnections();
-    // Reset view to center content (optional)?
-    // Let's just fit view loosely? No, keep user zoom.
     state.zoom = 1;
     render();
 }
@@ -511,12 +560,73 @@ function renderConnections() {
     }
     svgLayer.innerHTML = '';
     
+    // Reset all ports directly via DOM to ensure cleanliness
+    // This might be slightly expensive but ensures 100% correct state
+    const allPorts = document.querySelectorAll('.port');
+    allPorts.forEach(p => {
+        p.style.backgroundColor = '';
+        p.style.borderColor = '';
+        p.classList.remove('connected');
+    });
+
+    // Group connections by Target (for Transform Ordering)
+    const targetGroups = new Map();
+    state.connections.forEach(conn => {
+        // Only care about transforms for now, but general approach doesn't hurt
+        if (conn.targetPort.includes('transform')) {
+             const key = `${conn.targetNode}_${conn.targetPort}`;
+             if (!targetGroups.has(key)) targetGroups.set(key, []);
+             targetGroups.get(key).push(conn);
+        }
+    });
+
+    // Assign ranks
+    const connRanks = new Map(); // connId -> rank
+    targetGroups.forEach((conns, key) => {
+        if (conns.length > 1) {
+            // Sort by source node Y
+            conns.sort((a, b) => {
+                const nodeA = state.nodes.find(n => n.id === a.sourceNode);
+                const nodeB = state.nodes.find(n => n.id === b.sourceNode);
+                return (nodeA ? nodeA.y : 0) - (nodeB ? nodeB.y : 0);
+            });
+            conns.forEach((c, idx) => {
+                connRanks.set(c.id || JSON.stringify(c), idx + 1); // 1-based index
+            });
+        }
+    });
+
     state.connections.forEach(conn => {
         const p1 = getPortPosition(conn.sourceNode, conn.sourcePort, 'output');
         const p2 = getPortPosition(conn.targetNode, conn.targetPort, 'input');
         
         if (p1 && p2 && Number.isFinite(p1.x) && Number.isFinite(p1.y) && Number.isFinite(p2.x) && Number.isFinite(p2.y)) {
-            drawCurve(p1, p2, false, conn);
+            // Check for rank
+            const rank = connRanks.get(conn.id || JSON.stringify(conn));
+            drawCurve(p1, p2, false, conn, rank);
+            
+            // Colorize Ports
+            const sourceNode = state.nodes.find(n => n.id === conn.sourceNode);
+            if (sourceNode) {
+                const color = NODE_TYPES[sourceNode.type].color;
+                
+                // Colorize Source Port (Output)
+                const srcEl = document.querySelector(`.port[data-node="${conn.sourceNode}"][data-port="${conn.sourcePort}"][data-type="output"]`);
+                if (srcEl) {
+                    srcEl.style.backgroundColor = color;
+                    srcEl.style.borderColor = color;
+                    srcEl.classList.add('connected');
+                }
+                
+                // Colorize Target Port (Input) - Match the wire flow
+                const tgtEl = document.querySelector(`.port[data-node="${conn.targetNode}"][data-port="${conn.targetPort}"][data-type="input"]`);
+                if (tgtEl) {
+                    tgtEl.style.backgroundColor = color;
+                    tgtEl.style.borderColor = color;
+                    tgtEl.classList.add('connected');
+                }
+            }
+
         } else {
             console.warn('Failed to render connection (invalid coords):', conn, 'p1:', p1, 'p2:', p2);
         }
@@ -525,6 +635,19 @@ function renderConnections() {
     if (state.tempLine) {
         if (state.tempLine.start && state.tempLine.curr) {
              drawCurve(state.tempLine.start, state.tempLine.curr, true);
+             
+             // Colorize Start Port during drag
+             const startNode = state.nodes.find(n => n.id === state.tempLine.startNode);
+             if (startNode) {
+                 const color = NODE_TYPES[startNode.type].color;
+                 const type = state.tempLine.type === 'output' ? 'output' : 'input'; // Origin is always startPort
+                 const portEl = document.querySelector(`.port[data-node="${state.tempLine.startNode}"][data-port="${state.tempLine.startPort}"][data-type="${type}"]`);
+                 if (portEl) {
+                     portEl.style.backgroundColor = color;
+                     portEl.style.borderColor = color;
+                 }
+             }
+
         } else {
              console.warn("Invalid tempLine coords", state.tempLine);
         }
