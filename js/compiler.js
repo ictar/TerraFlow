@@ -225,7 +225,6 @@ function buildCLIConfig() {
         }
 
         const cliConfig = {
-            experiment_name: state.globalConfig.experiment_name || 'my_experiment',
             seed_everything: state.globalConfig.seed_everything,
             trainer: {
                 accelerator: trainerNode.data.accelerator,
@@ -251,7 +250,7 @@ function buildCLIConfig() {
                     no_data_replace: parseInt(dataNode.data.no_data_replace),
                     no_label_replace: parseInt(dataNode.data.no_label_replace),
                     use_metadata: dataNode.data.use_metadata === 'True',
-                    bands: bands,
+                    bands: [...bands],
                     train_transform: gatherTransforms(dataNode.id, 'train_transform'),
                     val_transform: gatherTransforms(dataNode.id, 'val_transform'),
                     test_transform: gatherTransforms(dataNode.id, 'test_transform')
@@ -264,11 +263,11 @@ function buildCLIConfig() {
                         // Backbone Args
                         backbone: backboneNode ? backboneNode.data.model_name : 'prithvi_eo_v1_100',
                         backbone_pretrained: backboneNode ? (backboneNode.data.pretrained === 'True') : true,
-                        backbone_bands: bands, 
-                        in_channels: backboneNode ? parseInt(backboneNode.data.in_channels) : 6,
+                        backbone_bands: [...bands], 
+                        in_chans: backboneNode ? parseInt(backboneNode.data.in_channels) : 6,
                         num_frames: backboneNode ? parseInt(backboneNode.data.num_frames) : 1,
-                        backbone_drop_path_rate: backboneNode ? parseFloat(backboneNode.data.drop_path_rate) : 0.0,
-                        backbone_window_size: backboneNode ? parseInt(backboneNode.data.window_size) : 8,
+                        drop_path_rate: backboneNode ? parseFloat(backboneNode.data.drop_path_rate) : 0.0,
+                        window_size: backboneNode ? parseInt(backboneNode.data.window_size) : 8,
                         
                         // Decoder Args
                         decoder: decoderNode ? decoderNode.data.decoder_name : 'UperNetDecoder',
@@ -276,9 +275,9 @@ function buildCLIConfig() {
                         decoder_scale_modules: decoderNode ? (decoderNode.data.scale_modules === 'True') : true,
                         
                         // Head Args
-                        head_dropout: headNode ? parseFloat(headNode.data.dropout) : 0.1,
-                        head_learned_upscale_layers: headNode ? parseInt(headNode.data.learned_upscale_layers) : 1,
-                        head_final_act: (headNode && headNode.data.final_act !== 'None') ? `torch.nn.${headNode.data.final_act}` : undefined,
+                        dropout: headNode ? parseFloat(headNode.data.dropout) : 0.1,
+                        learned_upscale_layers: headNode ? parseInt(headNode.data.learned_upscale_layers) : 1,
+                        final_act: (headNode && headNode.data.final_act !== 'None') ? `torch.nn.${headNode.data.final_act}` : undefined,
 
                         // Task Specific + Necks
                         num_classes: taskNode.data.num_classes ? parseInt(taskNode.data.num_classes) : undefined,
@@ -496,7 +495,8 @@ function exportNotebook() {
     try {
         const config = buildCLIConfig();
         const notebook = generateNotebookJSON(config);
-        downloadJSON(notebook, `${config.experiment_name || 'TerraFlow'}.ipynb`);
+        const filename = state.globalConfig.experiment_name || 'TerraFlow';
+        downloadJSON(notebook, `${filename}.ipynb`);
     } catch (e) {
         alert("⚠️ Export Failed: " + e.message);
         console.error(e);
@@ -512,7 +512,8 @@ function exportYaml() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${config.experiment_name || 'config'}.yaml`;
+        const filename = state.globalConfig.experiment_name || 'config';
+        a.download = `${filename}.yaml`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
