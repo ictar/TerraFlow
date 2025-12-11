@@ -1,0 +1,304 @@
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #121212;
+    color: #e5e5e5;
+    overflow: hidden;
+    user-select: none;
+}
+
+/* Grid Background */
+#canvas-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image:
+        linear-gradient(#1f1f1f 1px, transparent 1px),
+        linear-gradient(90deg, #1f1f1f 1px, transparent 1px);
+    background-size: 20px 20px;
+    z-index: 0;
+    cursor: grab;
+}
+
+#canvas-bg:active {
+    cursor: grabbing;
+}
+
+/* Nodes Container (The transformation root) */
+#nodes-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    z-index: 1;
+    pointer-events: none;
+    /* Let events pass through empty areas */
+}
+
+/* Re-enable pointer events for interactive children */
+.node {
+    pointer-events: auto;
+}
+
+path.connection {
+    pointer-events: auto;
+    stroke-width: 3px;
+}
+
+/* Ensure path click works */
+
+/* SVG Layer for Connections */
+#connections-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    /* Important: Ensure transforms originate from top-left to match nodes */
+    transform-origin: 0 0;
+}
+
+/* Node Styles */
+.node {
+    position: absolute;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 10px;
+    min-width: 240px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.2s, border-color 0.2s;
+}
+
+.node:hover {
+    border-color: #555;
+}
+
+.node.selected {
+    border: 1px solid #fff;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+.node-header {
+    background: #2a2a2a;
+    padding: 10px 14px;
+    border-radius: 10px 10px 0 0;
+    font-weight: 600;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: grab;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #333;
+}
+
+.node-header:active {
+    cursor: grabbing;
+}
+
+.node-body {
+    padding: 12px;
+    font-size: 12px;
+    background: #1e1e1e;
+    border-radius: 0 0 10px 10px;
+}
+
+/* Port Styles */
+.port {
+    width: 14px;
+    height: 14px;
+    background: #555;
+    border-radius: 50%;
+    position: absolute;
+    cursor: crosshair;
+    transition: all 0.2s;
+    z-index: 10;
+    border: 2px solid #1e1e1e;
+}
+
+.port:hover {
+    background: #fff;
+    transform: scale(1.2);
+    border-color: #3b82f6;
+}
+
+.port.input {
+    left: -7px;
+    background: #64748b;
+}
+
+.port.output {
+    right: -7px;
+    background: #64748b;
+}
+
+.socket-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+    height: 24px;
+}
+
+.socket-label {
+    margin: 0 14px;
+    color: #9ca3af;
+    flex: 1;
+    font-weight: 500;
+    font-size: 11px;
+}
+
+.socket-row.input .socket-label {
+    text-align: left;
+}
+
+.socket-row.output .socket-label {
+    text-align: right;
+}
+
+/* Connection Lines */
+path.connection {
+    fill: none;
+    stroke: #555;
+    stroke-width: 3px;
+    cursor: pointer;
+    transition: stroke 0.2s;
+    stroke-linecap: round;
+    /* Keeps line width consistent during zoom */
+    vector-effect: non-scaling-stroke;
+    pointer-events: stroke;
+}
+
+path.connection:hover {
+    stroke: #ef4444;
+    stroke-width: 4px;
+}
+
+path.drag-line {
+    fill: none;
+    stroke: #e5e5e5;
+    stroke-width: 2px;
+    stroke-dasharray: 4;
+    opacity: 0.6;
+    vector-effect: non-scaling-stroke;
+}
+
+/* Context Menu */
+#context-menu {
+    position: absolute;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 6px;
+    width: 200px;
+    display: none;
+    z-index: 100;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(10px);
+}
+
+.menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #d4d4d8;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 6px;
+    transition: background 0.1s;
+}
+
+.menu-item:hover {
+    background: #333;
+    color: white;
+}
+
+.menu-category {
+    font-size: 11px;
+    color: #666;
+    padding: 8px 12px 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.menu-separator {
+    height: 1px;
+    background: #333;
+    margin: 4px 0;
+}
+
+/* Inputs */
+.node-input-wrapper {
+    margin-bottom: 10px;
+}
+
+.node-input-label {
+    color: #6b7280;
+    font-size: 10px;
+    margin-bottom: 4px;
+    display: block;
+    font-weight: 500;
+}
+
+.node-input {
+    width: 100%;
+    background: #111;
+    border: 1px solid #333;
+    color: #e5e5e5;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    transition: border-color 0.2s;
+    font-family: monospace;
+}
+
+.node-input:focus {
+    border-color: #6366f1;
+    outline: none;
+    background: #000;
+}
+
+select.node-input {
+    cursor: pointer;
+}
+
+/* Floating UI */
+.floating-ui {
+    position: fixed;
+    z-index: 50;
+}
+
+.badge {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+/* Logo */
+.logo-text {
+    background: linear-gradient(to right, #60a5fa, #a855f7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
