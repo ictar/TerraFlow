@@ -445,32 +445,30 @@ function autoLayout() {
 
     // Y-Sorting Priority (Architectural Tiering)
     const TYPE_PRIORITY = {
-        // Tier 1: Model Components (Absolute Top)
-        'ModelBackbone': 1,
-        'ModelNeck': 2,
-        'ModelDecoder': 3,
-        'ModelHead': 4,
+        // Tier 1: Data Pipeline (Top)
+        // Transforms feed into DataModule, so grouping them high up keeps the Data chain at the top.
+        'DataModule': 1,
+        'AlbumentationsResize': 2,
+        'AlbumentationsHorizontalFlip': 3,
+        'AlbumentationsVerticalFlip': 3,
+        'ToTensorV2': 4,
 
-        // Tier 2: Model Aggregation & Architecture
-        'ModelFactory': 10,
-        'TiledInference': 11,
-        'OptimizerConfig': 12, 
-        'LRScheduler': 12, // Same tier as Optimizer
+        // Tier 2: Model Architecture (Middle)
+        'ModelBackbone': 10,
+        'ModelNeck': 11,
+        'ModelDecoder': 12,
+        'ModelHead': 13,
+        'ModelFactory': 14,
         
-        // Tier 3: Task (High-Mid)
-        'SegmentationTask': 20,
-        'PixelwiseRegressionTask': 20,
-        
-        // Tier 3: Data (Mid)
-        'DataModule': 30,
-        
-        // Tier 4: Transforms (Low-Mid - usually feed into Data)
-        'AlbumentationsResize': 40,
-        'AlbumentationsHorizontalFlip': 41,
-        'AlbumentationsVerticalFlip': 41,
-        'ToTensorV2': 42,
+        // Tier 3: Task & Optimization (Bottom)
+        // These take Model inputs and feed into Trainer
+        'TiledInference': 20,
+        'OptimizerConfig': 21, 
+        'LRScheduler': 21, 
+        'SegmentationTask': 25,
+        'PixelwiseRegressionTask': 25,
 
-        // Tier 5: Trainer & Infrastructure (Bottom)
+        // Tier 4: Trainer & Infrastructure (Bottom-Right Sink)
         'TrainerConfig': 50,
         'Logger': 51,
         'EarlyStopping': 52,
