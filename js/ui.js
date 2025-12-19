@@ -102,6 +102,75 @@ function createNodeDOM(node) {
         body.appendChild(wrapper);
     });
 
+    // Custom Params Support
+    if (NODE_TYPES[node.type].allowCustomParams) {
+        if (!node.data.customParams) node.data.customParams = [];
+
+        const customContainer = document.createElement('div');
+        customContainer.className = 'custom-params-container flex flex-col gap-2 mt-2';
+        
+        const renderCustomParams = () => {
+            customContainer.innerHTML = '';
+            node.data.customParams.forEach((param, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'border border-gray-700 bg-gray-800/50 p-2 rounded relative flex flex-col gap-1';
+                
+                // Header (Param #) + Delete
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-center';
+                const label = document.createElement('span');
+                label.className = 'text-[10px] uppercase font-bold text-gray-500 tracking-wider';
+                label.innerText = `Param ${index + 1}`;
+                
+                const delBtn = document.createElement('i');
+                delBtn.className = 'ph-bold ph-trash text-red-400 cursor-pointer hover:text-red-300 text-xs';
+                delBtn.onmousedown = (e) => e.stopPropagation(); // prevent drag
+                delBtn.onclick = () => {
+                   node.data.customParams.splice(index, 1);
+                   renderCustomParams();
+                };
+                
+                header.appendChild(label);
+                header.appendChild(delBtn);
+                wrapper.appendChild(header);
+
+                // Key Input
+                const keyInput = document.createElement('input');
+                keyInput.className = 'w-full bg-[#121212] border border-[#333] rounded px-1.5 py-1 text-xs text-blue-300 font-mono focus:border-blue-500 outline-none transition';
+                keyInput.placeholder = 'key (e.g. lr)';
+                keyInput.value = param.key;
+                keyInput.oninput = (e) => { param.key = e.target.value; };
+                keyInput.onmousedown = (e) => e.stopPropagation();
+                wrapper.appendChild(keyInput);
+
+                // Value Input
+                const valInput = document.createElement('input');
+                valInput.className = 'w-full bg-[#121212] border border-[#333] rounded px-1.5 py-1 text-xs text-green-300 font-mono focus:border-green-500 outline-none transition';
+                valInput.placeholder = 'value';
+                valInput.value = param.value;
+                valInput.oninput = (e) => { param.value = e.target.value; };
+                valInput.onmousedown = (e) => e.stopPropagation();
+                wrapper.appendChild(valInput);
+
+                customContainer.appendChild(wrapper);
+            });
+
+            // Add Params Button
+            const addBtn = document.createElement('button');
+            addBtn.className = 'w-full py-1.5 text-[10px] font-bold uppercase tracking-wider bg-gray-700 hover:bg-gray-600 rounded text-gray-300 transition flex items-center justify-center gap-1';
+            addBtn.innerHTML = '<i class="ph-bold ph-plus"></i> Add Param';
+            addBtn.onclick = () => {
+                node.data.customParams.push({ key: '', value: '' });
+                renderCustomParams();
+            };
+            addBtn.onmousedown = (e) => e.stopPropagation();
+            customContainer.appendChild(addBtn);
+        };
+
+        renderCustomParams();
+        body.appendChild(customContainer);
+    }
+
     // Outputs
     NODE_TYPES[node.type].outputs.forEach(outputKey => {
         const row = document.createElement('div');
@@ -643,20 +712,52 @@ function initUIEvents() {
         // Only on bg
         if (e.target.id === 'canvas-bg' || e.target.closest('#canvas-bg')) {
             e.preventDefault();
-            contextMenu.style.display = 'block';
-            contextMenu.style.left = e.clientX + 'px';
-            contextMenu.style.top = e.clientY + 'px';
             
-            // Save pos for creating node
+            // Save pos for creating node (Canvas Coords)
             const pos = transformMouseToCanvas(e.clientX, e.clientY);
             contextMenuPos = pos;
+
+            // Display primarily to measure (visibility hidden trick would be better but block is fine for instant measure)
+            contextMenu.style.display = 'block';
+            
+            // Boundary Logic
+            const menuWidth = contextMenu.offsetWidth;
+            const menuHeight = contextMenu.offsetHeight; 
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            
+            let x = e.clientX;
+            let y = e.clientY;
+            
+            // X-Axis Flip
+            if (x + menuWidth > winW) {
+                x -= menuWidth;
+            }
+            
+            // Y-Axis Flip (Open Upwards if near bottom)
+            // If remaining space below is less than menu height (or < 300px safety), flip up
+            if (winH - y < 300) {
+                contextMenu.style.top = 'auto';
+                contextMenu.style.bottom = (winH - y) + 'px';
+                // Reset origin to bottom-left for animation if we had one
+            } else {
+                contextMenu.style.bottom = 'auto';
+                contextMenu.style.top = y + 'px';
+            }
+            
+            contextMenu.style.left = x + 'px';
         }
     };
 
     // Zoom
     window.addEventListener('wheel', (e) => {
-        if (e.ctrlKey || e.metaKey) { // Only zoom with Ctrl/Meta key to avoid interfering with normal scroll? Or just always zoom as per original?
-             // Original behavior was always zoom
+        // If hovering over context menu, allow default scroll behavior (don't zoom)
+        if (e.target.closest('#context-menu')) {
+            return; 
+        }
+
+        if (e.ctrlKey || e.metaKey) { 
+             // ...
         }
         e.preventDefault();
         const delta = e.deltaY * -0.001;

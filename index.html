@@ -38,6 +38,19 @@
         <div class="menu-item" onclick="addNode('ModelHead', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-violet-500"></span> Model Head
         </div>
+        <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Custom Arch</div>
+        <div class="menu-item" onclick="addNode('CustomBackbone', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-violet-500"></span> Custom Backbone
+        </div>
+        <div class="menu-item" onclick="addNode('CustomNeck', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-violet-500"></span> Custom Neck
+        </div>
+        <div class="menu-item" onclick="addNode('CustomDecoder', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-violet-500"></span> Custom Decoder
+        </div>
+        <div class="menu-item" onclick="addNode('CustomHead', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-violet-500"></span> Custom Head
+        </div>
 
         <div class="menu-separator"></div>
         <div class="menu-category">Task Configuration</div>
@@ -56,11 +69,24 @@
         <div class="menu-item" onclick="addNode('TiledInference', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-violet-700"></span> Tiled Inference
         </div>
+        <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Custom Task</div>
+        <div class="menu-item" onclick="addNode('CustomTask', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-orange-500"></span> Custom Task
+        </div>
+        <div class="menu-item" onclick="addNode('CustomOptimizer', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-amber-500"></span> Custom Optimizer
+        </div>
+        <div class="menu-item" onclick="addNode('CustomLRScheduler', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-amber-600"></span> Custom Scheduler
+        </div>
 
         <div class="menu-separator"></div>
         <div class="menu-category">Data Pipeline</div>
         <div class="menu-item" onclick="addNode('DataModule', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-emerald-500"></span> Data Module
+        </div>
+        <div class="menu-item" onclick="addNode('CustomDataModule', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-emerald-500"></span> Custom Data Module
         </div>
         <!-- Augmentation Sub-header style -->
         <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Augmentation</div>
@@ -76,6 +102,9 @@
         <div class="menu-item" onclick="addNode('ToTensorV2', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-cyan-500"></span> To Tensor
         </div>
+        <div class="menu-item" onclick="addNode('CustomTransform', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-cyan-500"></span> Custom Transform
+        </div>
 
         <div class="menu-separator"></div>
         <div class="menu-category">Trainer Engine</div>
@@ -84,6 +113,9 @@
         </div>
         <div class="menu-item" onclick="addNode('Logger', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-pink-500"></span> Logger
+        </div>
+        <div class="menu-item" onclick="addNode('CustomLogger', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-pink-500"></span> Custom Logger
         </div>
         <!-- Callbacks Sub-header -->
         <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Callbacks</div>
@@ -98,6 +130,9 @@
         </div>
         <div class="menu-item" onclick="addNode('RichProgressBar', contextMenuPos.x, contextMenuPos.y)">
             <span class="badge bg-rose-500"></span> Rich Progress Bar
+        </div>
+        <div class="menu-item" onclick="addNode('CustomCallback', contextMenuPos.x, contextMenuPos.y)">
+            <span class="badge bg-rose-500"></span> Custom Callback
         </div>
     </div>
 

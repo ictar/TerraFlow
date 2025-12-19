@@ -20,6 +20,7 @@
     - **Multiple Callbacks**: Early Stopping, Model Checkpoint, LR Monitor, Rich Progress Bar.
     - **Flexible Logging**: TensorBoard, Wandb, CSV, MLFlow.
     - **Global Settings**: Experiment naming and centralized random seed management.
+    - **Custom Nodes**: Create nodes with custom class paths and arbitrary parameters (Key/Value) for any category (Data, Model, Task, etc.).
 - 🔄 **Re-Layout & Import**:
     - **Import YAML**: Load existing `.yaml` configuration files and reconstruct the visual graph instantly, preserving modular connections.
     - **Auto Layout**: Smart "Sink-based" organizing algorithm for perfect clean diagrams.
@@ -45,7 +46,8 @@ git clone https://github.com/ictar/TerraFlow.git
 2. **Connect**: Drag from Output ports (Green) to Input ports (Blue).
 3. **Configure**:
     - Tweak node parameters.
-    - Use **Global Settings** (top-right) for Experiment Name and Seed.
+    - Use **Custom Nodes** to add arbitrary parameters via "Add Param" button.
+    - Use **Global Settings** (bottom-right) for Experiment Name and Seed.
     - Use **Relayout** (bottom-left) to organize messy graphs.
 4. **Export**: Click export buttons (top-right) for `.ipynb` or `.yaml`.
 
@@ -66,7 +68,7 @@ TerraFlow is now fully modularized:
 - [x] **Modular Architecture**: Backbone/Neck/Decoder/Head splitting.
 - [x] **Advanced Tasks**: Regression & Tiled Inference.
 - [x] **Developer Experience**: Pythonic Notebook Export & Global Experiment Settings.
-- [ ] Custom Nodes: Define custom model architectures via UI.
+- [x] **Custom Nodes**: Define custom class paths and dynamic parameters.
 - [ ] Live Preview: Connect to a Python backend to preview dataset chips.
 
 ## 🤝 Contributing

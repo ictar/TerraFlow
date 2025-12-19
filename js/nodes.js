@@ -32,6 +32,16 @@ const NODE_TYPES = {
             { key: 'use_metadata', label: 'USE METADATA', type: 'select', options: ['True', 'False'], default: 'False' }
         ]
     },
+    'CustomDataModule': {
+        title: 'Custom Data',
+        color: '#10b981',
+        inputs: ['train_transform', 'val_transform', 'test_transform'],
+        outputs: ['datamodule'],
+        params: [
+            { key: 'class_path', label: 'CLASS PATH', type: 'text', default: 'MyDataModule' }
+        ],
+        allowCustomParams: true
+    },
     // [TRANSFORMS] - Cyan Theme
     'AlbumentationsResize': {
         title: 'Resize',
@@ -63,6 +73,15 @@ const NODE_TYPES = {
         color: '#06b6d4',
         inputs: [], outputs: ['transform'],
         params: []
+    },
+    'CustomTransform': {
+        title: 'Custom Transform',
+        color: '#06b6d4',
+        inputs: [], outputs: ['transform'],
+        params: [
+            { key: 'class_path', label: 'CLASS PATH', type: 'text', default: 'MyTransform' }
+        ],
+        allowCustomParams: true
     },
     // [ARCHITECTURE] - Violet Theme
     'ModelBackbone': {
@@ -140,6 +159,42 @@ const NODE_TYPES = {
              // Let's assume input-driven for now.
         ]
     },
+    'CustomBackbone': {
+        title: 'Custom Backbone',
+        color: '#7c3aed',
+        inputs: [],
+        outputs: ['backbone_config'],
+        params: [
+            { key: 'model_name', label: 'MODEL NAME', type: 'text', default: 'my_backbone' }
+        ],
+        allowCustomParams: true
+    },
+    'CustomDecoder': {
+        title: 'Custom Decoder',
+        color: '#8b5cf6',
+        inputs: [],
+        outputs: ['decoder_config'],
+        params: [
+             { key: 'decoder_name', label: 'DECODER NAME', type: 'text', default: 'MyDecoder' }
+        ],
+        allowCustomParams: true
+    },
+    'CustomHead': {
+        title: 'Custom Head',
+        color: '#a78bfa',
+        inputs: [],
+        outputs: ['head_config'],
+        params: [],
+        allowCustomParams: true
+    },
+    'CustomNeck': {
+        title: 'Custom Neck',
+        color: '#8b5cf6',
+        inputs: [],
+        outputs: ['neck_config'],
+        params: [],
+        allowCustomParams: true
+    },
     // [TILED INFERENCE] - Violet Theme (Darker)
     'TiledInference': {
         title: 'Tiled Inference',
@@ -179,6 +234,26 @@ const NODE_TYPES = {
             { key: 'patience', label: 'PATIENCE (Plateau)', type: 'number', default: 10 }
         ]
     },
+    'CustomOptimizer': {
+        title: 'Custom Optimizer',
+        color: '#f59e0b',
+        inputs: [],
+        outputs: ['optim_args'],
+        params: [
+            { key: 'type', label: 'CLASS PATH', type: 'text', default: 'torch.optim.Adam' }
+        ],
+        allowCustomParams: true
+    },
+    'CustomLRScheduler': {
+        title: 'Custom Scheduler',
+        color: '#d97706',
+        inputs: [],
+        outputs: ['scheduler_args'],
+        params: [
+             { key: 'type', label: 'CLASS PATH', type: 'text', default: 'torch.optim.lr_scheduler.StepLR' }
+        ],
+        allowCustomParams: true
+    },
     // [TASK] - Orange Theme
     // [TASK] - Orange Theme
     'SegmentationTask': {
@@ -204,6 +279,17 @@ const NODE_TYPES = {
             { key: 'model_factory', label: 'FACTORY', type: 'select', options: ['PrithviModelFactory', 'EncoderDecoderFactory'], default: 'PrithviModelFactory' }
         ]
     },
+    'CustomTask': {
+        title: 'Custom Task',
+        color: '#f97316',
+        inputs: ['model_args', 'optim_args', 'scheduler_args', 'tiled_inference'],
+        outputs: ['task'],
+        params: [
+            { key: 'class_path', label: 'CLASS PATH', type: 'text', default: 'terratorch.tasks.MyTask' },
+            { key: 'model_factory', label: 'FACTORY', type: 'select', options: ['EncoderDecoderFactory', 'PrithviModelFactory'], default: 'EncoderDecoderFactory' }
+        ],
+        allowCustomParams: true
+    },
     // [LOGGER] - Pink Theme
     // [LOGGER] - Pink Theme
     'Logger': {
@@ -217,6 +303,16 @@ const NODE_TYPES = {
             { key: 'name', label: 'RUN NAME', type: 'text', default: 'run_version_1' },
             { key: 'save_dir', label: 'SAVE DIR', type: 'text', default: 'logs' }
         ]
+    },
+    'CustomLogger': {
+        title: 'Custom Logger',
+        color: '#ec4899',
+        inputs: [],
+        outputs: ['logger'],
+        params: [
+            { key: 'type', label: 'CLASS PATH', type: 'text', default: 'lightning.pytorch.loggers.WandbLogger' }
+        ],
+        allowCustomParams: true
     },
     // [CALLBACK] - Rose Theme
     // [CALLBACK] - Rose Theme
@@ -258,6 +354,16 @@ const NODE_TYPES = {
         inputs: [],
         outputs: ['callback'],
         params: []
+    },
+    'CustomCallback': {
+        title: 'Custom Callback',
+        color: '#f43f5e',
+        inputs: [],
+        outputs: ['callback'],
+        params: [
+            { key: 'class_path', label: 'CLASS PATH', type: 'text', default: 'lightning.pytorch.callbacks.MyCallback' }
+        ],
+        allowCustomParams: true
     },
     // [TRAINER] - Blue Theme
     'TrainerConfig': {
