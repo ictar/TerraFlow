@@ -1,0 +1,23 @@
+{
+  "name": "terraflow",
+  "version": "1.0.0",
+  "description": "> A No-Code Visual Interface for GeoAI Fine-tuning based on [Terratorch](https://terrastackai.github.io/terratorch/stable/).",
+  "main": "index.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ictar/TerraFlow.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ictar/TerraFlow/issues"
+  },
+  "homepage": "https://github.com/ictar/TerraFlow#readme"
+}
