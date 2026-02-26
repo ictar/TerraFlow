@@ -13,7 +13,14 @@ function handleFileImport(input) {
     try {
       const content = e.target.result;
       const config = jsyaml.load(content);
-      reconstructGraph(config);
+
+      // Use filename (without extension) as experiment name
+      let filename = file.name;
+      if (filename.includes(".")) {
+        filename = filename.substring(0, filename.lastIndexOf("."));
+      }
+
+      reconstructGraph(config, false, filename);
       input.value = ""; // Reset
     } catch (e) {
       console.error(e);
@@ -23,7 +30,7 @@ function handleFileImport(input) {
   reader.readAsText(file);
 }
 
-function reconstructGraph(config, silent = false) {
+function reconstructGraph(config, silent = false, filename = null) {
   if (!silent && !confirm("Importing will clear the current canvas. Continue?"))
     return;
 
@@ -36,7 +43,9 @@ function reconstructGraph(config, silent = false) {
 
   try {
     // 1.5 Restore Global Config
-    if (config.experiment_name) {
+    if (filename) {
+      state.globalConfig.experiment_name = filename;
+    } else if (config.experiment_name) {
       state.globalConfig.experiment_name = config.experiment_name;
     }
     if (config.seed_everything !== undefined) {
@@ -72,34 +81,48 @@ function reconstructGraph(config, silent = false) {
     // --- Logger & Callbacks ---
     let loggerNode, esNode;
     if (config.trainer) {
-      // Parse Logger
-      const loggerConfig = config.trainer.logger;
-      if (loggerConfig) {
-        const init = loggerConfig.init_args || {};
-        let type = "TensorBoard";
-        let project = "terraflow_project";
-        let name = init.name || "terraflow_run";
+      // Parse Logger(s)
+      const loggerNodesData = [];
+      let loggerConfigs = config.trainer.logger;
 
-        const cls = loggerConfig.class_path || "";
-        if (cls.includes("Wandb")) {
-          type = "Wandb";
-          project = init.project;
-        } else if (cls.includes("CSV")) {
-          type = "CSV";
-        } else if (cls.includes("MLFlow")) {
-          type = "MLFlow";
-          project = init.experiment_name;
-          name = init.run_name;
+      if (loggerConfigs) {
+        if (!Array.isArray(loggerConfigs)) {
+          loggerConfigs = [loggerConfigs];
         }
 
-        const loggerData = {
-          type: type,
-          project: project || "terraflow_project",
-          name: name,
-          save_dir: init.save_dir || "logs",
-        };
-        loggerNode = addNode("Logger", 900, 200, loggerData);
+        loggerConfigs.forEach((loggerConfig) => {
+          const init = loggerConfig.init_args || {};
+          let type = "TensorBoard";
+          let project = "terraflow_project";
+          let name = init.name || "terraflow_run";
+
+          const cls = loggerConfig.class_path || "";
+          if (cls.includes("Wandb")) {
+            type = "Wandb";
+            project = init.project;
+          } else if (cls.includes("CSV")) {
+            type = "CSV";
+          } else if (cls.includes("MLFlow")) {
+            type = "MLFlow";
+            project = init.experiment_name;
+            name = init.run_name;
+          }
+
+          const loggerData = {
+            type: type,
+            project: project || "terraflow_project",
+            name: name,
+            save_dir: init.save_dir || "logs",
+          };
+          loggerNodesData.push({ type: "Logger", data: loggerData });
+        });
       }
+
+      var createdLoggerNodes = [];
+      loggerNodesData.forEach((item, i) => {
+        const node = addNode(item.type, 900, 200 + i * 150, item.data);
+        createdLoggerNodes.push(node);
+      });
 
       // Parse Callbacks
       const callbackNodesData = [];
@@ -119,6 +142,7 @@ function reconstructGraph(config, silent = false) {
               mode: cb.init_args?.mode || "min",
               save_top_k: cb.init_args?.save_top_k || 1,
               filename: cb.init_args?.filename,
+              dirpath: cb.init_args?.dirpath,
             };
             callbackNodesData.push({ type: "ModelCheckpoint", data: d });
           } else if (cp.includes("LearningRateMonitor")) {
@@ -128,6 +152,24 @@ function reconstructGraph(config, silent = false) {
             callbackNodesData.push({ type: "LearningRateMonitor", data: d });
           } else if (cp.includes("RichProgressBar")) {
             callbackNodesData.push({ type: "RichProgressBar", data: {} });
+          } else {
+            const customParamsArray = [];
+            for (const [k, v] of Object.entries(cb.init_args || {})) {
+              let valStr = "";
+              if (v !== undefined && v !== null) {
+                if (typeof v === "object") {
+                  valStr = JSON.stringify(v);
+                } else {
+                  valStr = v.toString();
+                }
+              }
+              customParamsArray.push({ key: k, value: valStr });
+            }
+            const d = {
+              class_path: cp,
+              customParams: customParamsArray,
+            };
+            callbackNodesData.push({ type: "CustomCallback", data: d });
           }
         });
       }
@@ -136,6 +178,7 @@ function reconstructGraph(config, silent = false) {
       // We need to store them to connect later
       var createdCallbackNodes = [];
       callbackNodesData.forEach((item, i) => {
+        // Increment Y directly based on sequence index to guarantee correct Y sorting later
         const node = addNode(item.type, 700 + i * 50, 600 + i * 150, item.data);
         createdCallbackNodes.push(node);
       });
@@ -145,32 +188,72 @@ function reconstructGraph(config, silent = false) {
     let dataNode;
     if (config.data) {
       const init = config.data.init_args || {};
-      const dataData = {
-        class_path:
-          config.data.class_path || "GenericNonGeoSegmentationDataModule",
-        batch_size: init.batch_size,
-        num_workers: init.num_workers,
-        train_data_root: init.train_data_root,
-        val_data_root: init.val_data_root,
-        test_data_root: init.test_data_root,
-        means: Array.isArray(init.means)
-          ? JSON.stringify(init.means)
-          : init.means,
-        stds: Array.isArray(init.stds) ? JSON.stringify(init.stds) : init.stds,
-        num_classes: init.num_classes,
-        img_grep: init.img_grep,
-        label_grep: init.label_grep,
-        bands: Array.isArray(init.bands) ? init.bands.join(",") : init.bands,
-        constant_scale: init.constant_scale,
-        no_data_replace: init.no_data_replace,
-        no_label_replace: init.no_label_replace,
-        drop_last: init.drop_last === true ? "True" : "False",
-        reduce_zero_label: init.reduce_zero_label === true ? "True" : "False",
-        rgb_indices: Array.isArray(init.rgb_indices)
-          ? init.rgb_indices.join(",")
-          : init.rgb_indices,
-      };
-      dataNode = addNode("DataModule", 500, 520, dataData);
+      const classPath =
+        config.data.class_path || "GenericNonGeoSegmentationDataModule";
+
+      const genericDataModules = [
+        "GenericNonGeoPixelwiseRegressionDataModule",
+        "GenericNonGeoSegmentationDataModule",
+        "Sen1Floods11NonGeoDataModule",
+        "Landsat7DataModule",
+        "TorchGeoDataModule",
+      ];
+
+      if (genericDataModules.some((g) => classPath.includes(g))) {
+        const dataData = {
+          class_path: classPath,
+          batch_size: init.batch_size,
+          num_workers: init.num_workers,
+          train_data_root: init.train_data_root,
+          val_data_root: init.val_data_root,
+          test_data_root: init.test_data_root,
+          means: Array.isArray(init.means)
+            ? JSON.stringify(init.means)
+            : init.means,
+          stds: Array.isArray(init.stds)
+            ? JSON.stringify(init.stds)
+            : init.stds,
+          num_classes: init.num_classes,
+          img_grep: init.img_grep,
+          label_grep: init.label_grep,
+          bands: Array.isArray(init.bands) ? init.bands.join(",") : init.bands,
+          constant_scale: init.constant_scale,
+          no_data_replace: init.no_data_replace,
+          no_label_replace: init.no_label_replace,
+          drop_last: init.drop_last === true ? "True" : "False",
+          reduce_zero_label: init.reduce_zero_label === true ? "True" : "False",
+          rgb_indices: Array.isArray(init.rgb_indices)
+            ? init.rgb_indices.join(",")
+            : init.rgb_indices,
+        };
+        dataNode = addNode("DataModule", 500, 520, dataData);
+      } else {
+        // Custom Data Module
+        const customParamsArray = [];
+        for (const [k, v] of Object.entries(init)) {
+          if (
+            !["train_transform", "val_transform", "test_transform"].includes(k)
+          ) {
+            let valStr = "";
+            if (v !== undefined && v !== null) {
+              if (typeof v === "object") {
+                valStr = JSON.stringify(v);
+              } else {
+                valStr = v.toString();
+              }
+            }
+            customParamsArray.push({
+              key: k,
+              value: valStr,
+            });
+          }
+        }
+        const dataData = {
+          class_path: classPath,
+          customParams: customParamsArray,
+        };
+        dataNode = addNode("CustomDataModule", 500, 520, dataData);
+      }
 
       // Parse Transforms
       ["train_transform", "val_transform", "test_transform"].forEach(
@@ -179,31 +262,50 @@ function reconstructGraph(config, silent = false) {
             init[key].forEach((t, i) => {
               let type = null;
               let tData = {};
+              const tInit = t.init_args || {};
 
               if (t.class_path.includes("Resize")) {
                 type = "AlbumentationsResize";
                 tData = {
-                  height: t.init_args.height,
-                  width: t.init_args.width,
+                  height: tInit.height,
+                  width: tInit.width,
                 };
               } else if (t.class_path.includes("HorizontalFlip")) {
                 type = "AlbumentationsHorizontalFlip";
-                tData = { p: t.init_args.p };
+                tData = { p: tInit.p };
               } else if (t.class_path.includes("VerticalFlip")) {
                 type = "AlbumentationsVerticalFlip";
-                tData = { p: t.init_args.p };
+                tData = { p: tInit.p };
               } else if (t.class_path.includes("D4")) {
                 type = "AlbumentationsD4";
-                tData = { p: t.init_args.p };
+                tData = { p: tInit.p };
               } else if (t.class_path.includes("ToTensorV2")) {
                 type = "ToTensorV2";
+              } else {
+                type = "CustomTransform";
+                const customParamsArray = [];
+                for (const [k, v] of Object.entries(tInit)) {
+                  let valStr = "";
+                  if (v !== undefined && v !== null) {
+                    if (typeof v === "object") {
+                      valStr = JSON.stringify(v);
+                    } else {
+                      valStr = v.toString();
+                    }
+                  }
+                  customParamsArray.push({ key: k, value: valStr });
+                }
+                tData = {
+                  class_path: t.class_path,
+                  customParams: customParamsArray,
+                };
               }
 
               if (type) {
                 const tNode = addNode(
                   type,
                   150 + i * 180,
-                  600 + keyIdx * 150,
+                  600 + keyIdx * 250 + i * 50,
                   tData,
                 );
                 // Connect
@@ -239,6 +341,33 @@ function reconstructGraph(config, silent = false) {
         ignore_index: init.ignore_index,
         num_classes: (init.model_args || {}).num_classes,
         model_factory: init.model_factory, // might be string
+        freeze_backbone: init.freeze_backbone === true ? "True" : "False",
+        freeze_decoder: init.freeze_decoder === true ? "True" : "False",
+        freeze_head: init.freeze_head === true ? "True" : "False",
+        plot_on_val:
+          init.plot_on_val !== undefined ? init.plot_on_val.toString() : "10",
+        class_names: init.class_names
+          ? Array.isArray(init.class_names)
+            ? init.class_names.join(",")
+            : init.class_names.toString()
+          : "",
+        test_dataloaders_names: init.test_dataloaders_names
+          ? Array.isArray(init.test_dataloaders_names)
+            ? init.test_dataloaders_names.join(",")
+            : init.test_dataloaders_names.toString()
+          : "",
+        output_on_inference: init.output_on_inference
+          ? Array.isArray(init.output_on_inference)
+            ? `[${init.output_on_inference.map((s) => `'${s}'`).join(",")}]`
+            : init.output_on_inference.toString()
+          : "prediction",
+        output_most_probable:
+          init.output_most_probable === false ? "False" : "True",
+        path_to_record_metrics: init.path_to_record_metrics || "",
+        tiled_inference_on_testing:
+          init.tiled_inference_on_testing === true ? "True" : "False",
+        tiled_inference_on_validation:
+          init.tiled_inference_on_validation === true ? "True" : "False",
       };
       taskNode = addNode(taskType, 500, 220, taskData);
 
@@ -251,10 +380,19 @@ function reconstructGraph(config, silent = false) {
         modelFactoryNode = addNode("ModelFactory", 100, 200, {});
 
         // 2. Create Backbone Node
+        let modStr = "";
+        if (ma.backbone_modalities !== undefined) {
+          modStr =
+            typeof ma.backbone_modalities === "object"
+              ? JSON.stringify(ma.backbone_modalities)
+              : ma.backbone_modalities.toString();
+        }
+
         const backboneData = {
           model_name: ma.backbone,
           pretrained: ma.backbone_pretrained === false ? "False" : "True",
-          in_channels: ma.in_channels,
+          backbone_modalities: modStr,
+          in_channels: ma.in_chans !== undefined ? ma.in_chans : ma.in_channels,
           num_frames: ma.num_frames,
           drop_path_rate: ma.backbone_drop_path_rate,
           window_size: ma.backbone_window_size,
@@ -370,6 +508,13 @@ function reconstructGraph(config, silent = false) {
         monitor: schedInit.monitor || "val/loss",
         patience: schedInit.patience || 10,
         t_max: schedInit.T_max || 50,
+        mode: schedInit.mode || "min",
+        factor: schedInit.factor || 0.1,
+        threshold: schedInit.threshold || 1e-4,
+        threshold_mode: schedInit.threshold_mode || "rel",
+        cooldown: schedInit.cooldown || 0,
+        min_lr: schedInit.min_lr || 0,
+        eps: schedInit.eps || 1e-8,
       };
       schedulerNode = addNode("LRScheduler", 100, 1050, schedData);
     }
@@ -417,12 +562,14 @@ function reconstructGraph(config, silent = false) {
         targetPort: "datamodule",
       });
     }
-    if (loggerNode && trainerNode) {
-      state.connections.push({
-        sourceNode: loggerNode.id,
-        sourcePort: "logger",
-        targetNode: trainerNode.id,
-        targetPort: "logger",
+    if (createdLoggerNodes && createdLoggerNodes.length > 0 && trainerNode) {
+      createdLoggerNodes.forEach((node) => {
+        state.connections.push({
+          sourceNode: node.id,
+          sourcePort: "logger",
+          targetNode: trainerNode.id,
+          targetPort: "logger",
+        });
       });
     }
     if (tiledNode && taskNode) {

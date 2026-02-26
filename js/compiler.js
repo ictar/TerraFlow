@@ -89,22 +89,35 @@ function buildHydraConfig() {
     };
   }
 
-  return { yaml: jsyaml.dump(fullConfig), lossType: taskNode.data.loss };
+  return {
+    yaml: jsyaml.dump(fullConfig, { lineWidth: -1 }),
+    lossType: taskNode.data.loss,
+  };
 }
 
-// Helper to extract custom params
 function extractParams(node) {
   const params = {};
   if (node.data.customParams) {
     node.data.customParams.forEach((p) => {
       let val = p.value;
       // Simple Type Inference
-      if (val === "True") val = true;
-      else if (val === "False") val = false;
-      else if (!isNaN(val) && val.trim() !== "") {
-        // Check if it looks like a number
-        if (val.includes(".")) val = parseFloat(val);
-        else val = parseInt(val);
+      if (typeof val === "string") {
+        const trimmed = val.trim();
+        const lowered = trimmed.toLowerCase();
+        if (lowered === "true") val = true;
+        else if (lowered === "false") val = false;
+        else if (!isNaN(val) && trimmed !== "") {
+          // Check if it looks like a number
+          if (trimmed.includes(".")) val = parseFloat(trimmed);
+          else val = parseInt(trimmed);
+        } else if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          // Attempt to parse JSON strings back into objects/arrays
+          try {
+            val = JSON.parse(trimmed);
+          } catch (e) {
+            // Keep as string if it's not valid JSON
+          }
+        }
       }
       params[p.key] = val;
     });
@@ -130,7 +143,9 @@ function buildCLIConfig() {
   const schedulerNode = findAllInputs(taskNode.id, "scheduler_args")[0];
 
   // Logger & Callbacks
-  const loggerNode = findInput(trainerNode.id, "logger");
+  const loggerNodes = findAllInputs(trainerNode.id, "logger");
+  // Sort loggers to maintain order
+  loggerNodes.sort((a, b) => a.y - b.y);
   const callbackNodes = findAllInputs(trainerNode.id, "callbacks");
   // Sort callbacks by Y position to match visual order (like transforms)
   callbackNodes.sort((a, b) => a.y - b.y);
@@ -159,6 +174,7 @@ function buildCLIConfig() {
         callbacks.push({
           class_path: "lightning.pytorch.callbacks.ModelCheckpoint",
           init_args: {
+            dirpath: node.data.dirpath,
             monitor: node.data.monitor,
             mode: node.data.mode,
             save_top_k: parseInt(node.data.save_top_k),
@@ -185,27 +201,39 @@ function buildCLIConfig() {
 
   // --- Logger ---
   let loggerConfig = null;
-  if (loggerNode) {
-    if (loggerNode.type === "CustomLogger") {
-      loggerConfig = {
-        class_path: loggerNode.data.type, // Custom Logger uses 'type' param as classpath default
-        init_args: extractParams(loggerNode),
-      };
-    } else {
-      const type = loggerNode.data.type;
-      const args = {
-        save_dir: loggerNode.data.save_dir,
-        name: loggerNode.data.name,
-      };
+  if (loggerNodes.length > 0) {
+    const configs = [];
+    loggerNodes.forEach((loggerNode) => {
+      if (loggerNode.type === "CustomLogger") {
+        configs.push({
+          class_path: loggerNode.data.type, // Custom Logger uses 'type' param as classpath default
+          init_args: extractParams(loggerNode),
+        });
+      } else {
+        const type = loggerNode.data.type;
+        const args = {
+          save_dir: loggerNode.data.save_dir,
+          name: loggerNode.data.name,
+        };
 
-      let classPath = "lightning.pytorch.loggers.TensorBoardLogger";
-      if (type === "CSVLogger")
-        classPath = "lightning.pytorch.loggers.CSVLogger";
-      else if (type === "WandbLogger") {
-        classPath = "lightning.pytorch.loggers.WandbLogger";
-        if (loggerNode.data.project) args.project = loggerNode.data.project;
+        let classPath = "lightning.pytorch.loggers.TensorBoardLogger";
+        if (type === "CSVLogger" || type === "CSV" || type === "CSV Logger")
+          classPath = "lightning.pytorch.loggers.CSVLogger";
+        else if (type === "WandbLogger" || type === "Wandb") {
+          classPath = "lightning.pytorch.loggers.WandbLogger";
+          if (loggerNode.data.project) args.project = loggerNode.data.project;
+        } else if (type === "MLFlow") {
+          classPath = "lightning.pytorch.loggers.MLFlowLogger";
+        }
+        configs.push({ class_path: classPath, init_args: args });
       }
-      loggerConfig = { class_path: classPath, init_args: args };
+    });
+
+    // PyTorch Lightning supports a list of loggers
+    if (configs.length === 1) {
+      loggerConfig = configs[0];
+    } else {
+      loggerConfig = configs;
     }
   }
 
@@ -278,11 +306,17 @@ function buildCLIConfig() {
     } else {
       if (schedulerNode.data.type === "ReduceLROnPlateau") {
         schedulerConfig = {
-          class_path: "ReduceLROnPlateau",
+          class_path: "torch.optim.lr_scheduler.ReduceLROnPlateau",
           init_args: {
             monitor: schedulerNode.data.monitor,
+            mode: schedulerNode.data.mode,
+            factor: parseFloat(schedulerNode.data.factor),
             patience: parseInt(schedulerNode.data.patience),
-            mode: "min",
+            threshold: parseFloat(schedulerNode.data.threshold),
+            threshold_mode: schedulerNode.data.threshold_mode,
+            cooldown: parseInt(schedulerNode.data.cooldown),
+            min_lr: parseFloat(schedulerNode.data.min_lr),
+            eps: parseFloat(schedulerNode.data.eps),
           },
         };
       } else {
@@ -323,34 +357,48 @@ function buildCLIConfig() {
 
   // --- CLI Config Construction ---
 
-  // Model Args Accumulation
-  let finalModelArgs = {
-    // Defaults
-    backbone: "prithvi_eo_v1_100",
-    decoder: "UperNetDecoder",
-    num_classes: taskNode.data.num_classes
-      ? parseInt(taskNode.data.num_classes)
-      : undefined,
-    necks: necksConfig,
-  };
+  // Model Args Accumulation (Structured to keep related args together)
+  let finalModelArgs = {};
 
   // Backbone Info
   if (backboneNode) {
-    finalModelArgs.backbone = backboneNode.data.model_name;
     if (backboneNode.type === "CustomBackbone") {
+      finalModelArgs.backbone =
+        backboneNode.data.model_name || "prithvi_eo_v1_100";
       Object.assign(finalModelArgs, extractParams(backboneNode)); // Merge custom
+      finalModelArgs.backbone_bands = [...bands];
     } else {
       // Standard
+      finalModelArgs.backbone = backboneNode.data.model_name;
       finalModelArgs.backbone_pretrained =
         backboneNode.data.pretrained === "True";
+      finalModelArgs.backbone_bands = [...bands];
+
+      if (backboneNode.data.backbone_modalities) {
+        let modStr = backboneNode.data.backbone_modalities;
+        if (typeof modStr !== "string") modStr = JSON.stringify(modStr);
+        modStr = modStr.trim();
+        if (modStr !== "") {
+          try {
+            finalModelArgs.backbone_modalities = JSON.parse(modStr);
+          } catch (e) {
+            finalModelArgs.backbone_modalities = modStr;
+          }
+        }
+      }
+
       finalModelArgs.in_chans = parseInt(backboneNode.data.in_channels);
       finalModelArgs.num_frames = parseInt(backboneNode.data.num_frames);
       // etc...
     }
-    finalModelArgs.backbone_bands = [...bands];
   } else {
     // Fallback defaults
+    finalModelArgs.backbone = "prithvi_eo_v1_100";
     finalModelArgs.backbone_bands = [...bands];
+  }
+
+  if (necksConfig && necksConfig.length > 0) {
+    finalModelArgs.necks = necksConfig;
   }
 
   // Decoder Info
@@ -365,6 +413,12 @@ function buildCLIConfig() {
       finalModelArgs.decoder_scale_modules =
         decoderNode.data.scale_modules === "True";
     }
+  } else {
+    finalModelArgs.decoder = "UperNetDecoder";
+  }
+
+  if (taskNode.data.num_classes) {
+    finalModelArgs.num_classes = parseInt(taskNode.data.num_classes);
   }
 
   // Head Info
@@ -433,24 +487,131 @@ function buildCLIConfig() {
   dataInit.val_transform = gatherTransforms(dataNode.id, "val_transform");
   dataInit.test_transform = gatherTransforms(dataNode.id, "test_transform");
 
-  // Task & Model Block
-  const modelBlock = {
-    class_path: taskClass,
-    init_args: {
-      model_args: finalModelArgs,
-      loss: taskNode.data.loss, // Might be undefined for CustomTask?
-      ignore_index: taskNode.data.ignore_index
-        ? parseInt(taskNode.data.ignore_index)
-        : undefined,
-      model_factory: taskNode.data.model_factory || "EncoderDecoderFactory",
-    },
-  };
+  if (dataInit.train_transform.length === 0) delete dataInit.train_transform;
+  if (dataInit.val_transform.length === 0) delete dataInit.val_transform;
+  if (dataInit.test_transform.length === 0) delete dataInit.test_transform;
+
+  // Task Init Block - Ordered to match typical python __init__ signature
+  let taskInitArgs = {};
+
+  // 1. model_factory
+  if (
+    taskNode.data.model_factory &&
+    taskNode.data.model_factory !== "EncoderDecoderFactory"
+  ) {
+    taskInitArgs.model_factory = taskNode.data.model_factory;
+  }
+
+  // 2. model_args
+  taskInitArgs.model_args = finalModelArgs;
+
+  // 3. loss
+  if (taskNode.data.loss && taskNode.data.loss !== "ce") {
+    taskInitArgs.loss = taskNode.data.loss;
+  }
+
+  // 4. ignore_index
+  if (
+    taskNode.data.ignore_index !== undefined &&
+    taskNode.data.ignore_index !== "-1" &&
+    taskNode.data.ignore_index !== -1
+  ) {
+    taskInitArgs.ignore_index = parseInt(taskNode.data.ignore_index);
+  }
+
+  // 5. freeze arguments
+  if (taskNode.data.freeze_backbone === "True")
+    taskInitArgs.freeze_backbone = true;
+  if (taskNode.data.freeze_decoder === "True")
+    taskInitArgs.freeze_decoder = true;
+  if (taskNode.data.freeze_head === "True") taskInitArgs.freeze_head = true;
+
+  // 6. other configs
+  if (
+    taskNode.data.plot_on_val &&
+    taskNode.data.plot_on_val.toString() !== "10"
+  ) {
+    let pv = taskNode.data.plot_on_val.toString().trim();
+    if (pv.toLowerCase() === "true") taskInitArgs.plot_on_val = true;
+    else if (pv.toLowerCase() === "false") taskInitArgs.plot_on_val = false;
+    else if (!isNaN(pv) && pv !== "") taskInitArgs.plot_on_val = parseInt(pv);
+    else taskInitArgs.plot_on_val = pv;
+  }
+
+  if (taskNode.data.class_names && taskNode.data.class_names.trim() !== "") {
+    let cn = taskNode.data.class_names.trim();
+    if (cn.startsWith("[") && cn.endsWith("]")) {
+      try {
+        taskInitArgs.class_names = JSON.parse(cn.replace(/'/g, '"'));
+      } catch (e) {
+        taskInitArgs.class_names = cn.split(",").map((s) => s.trim());
+      }
+    } else {
+      taskInitArgs.class_names = cn.split(",").map((s) => s.trim());
+    }
+  }
+
+  if (
+    taskNode.data.test_dataloaders_names &&
+    taskNode.data.test_dataloaders_names.trim() !== ""
+  ) {
+    let tdn = taskNode.data.test_dataloaders_names.trim();
+    if (tdn.startsWith("[") && tdn.endsWith("]")) {
+      try {
+        taskInitArgs.test_dataloaders_names = JSON.parse(
+          tdn.replace(/'/g, '"'),
+        );
+      } catch (e) {
+        taskInitArgs.test_dataloaders_names = tdn
+          .split(",")
+          .map((s) => s.trim());
+      }
+    } else {
+      taskInitArgs.test_dataloaders_names = tdn.split(",").map((s) => s.trim());
+    }
+  }
+
+  if (
+    taskNode.data.output_on_inference &&
+    taskNode.data.output_on_inference.trim() !== "prediction"
+  ) {
+    let ooi = taskNode.data.output_on_inference.trim();
+    if (ooi.startsWith("[") && ooi.endsWith("]")) {
+      try {
+        taskInitArgs.output_on_inference = JSON.parse(ooi.replace(/'/g, '"'));
+      } catch (e) {
+        taskInitArgs.output_on_inference = ooi.split(",").map((s) => s.trim());
+      }
+    } else {
+      taskInitArgs.output_on_inference = ooi;
+    }
+  }
+
+  if (taskNode.data.output_most_probable === "False")
+    taskInitArgs.output_most_probable = false;
+
+  if (
+    taskNode.data.path_to_record_metrics &&
+    taskNode.data.path_to_record_metrics.trim() !== ""
+  ) {
+    taskInitArgs.path_to_record_metrics =
+      taskNode.data.path_to_record_metrics.trim();
+  }
+
+  if (taskNode.data.tiled_inference_on_testing === "True")
+    taskInitArgs.tiled_inference_on_testing = true;
+  if (taskNode.data.tiled_inference_on_validation === "True")
+    taskInitArgs.tiled_inference_on_validation = true;
 
   // Custom Task Params integration
   if (taskNode.type === "CustomTask") {
-    // Merge custom params into init_args directly (not model_args)
-    Object.assign(modelBlock.init_args, extractParams(taskNode));
+    Object.assign(taskInitArgs, extractParams(taskNode));
   }
+
+  const modelBlock = {
+    class_path: taskClass,
+    init_args: taskInitArgs,
+  };
 
   const cliConfig = {
     seed_everything: state.globalConfig.seed_everything,
@@ -466,6 +627,10 @@ function buildCLIConfig() {
       logger: loggerConfig,
       callbacks: callbackNodes.length > 0 ? callbacks : null,
       max_epochs: parseInt(trainerNode.data.max_epochs),
+      check_val_every_n_epoch: parseInt(
+        trainerNode.data.check_val_every_n_epoch,
+      ),
+      log_every_n_steps: parseInt(trainerNode.data.log_every_n_steps),
       enable_checkpointing: trainerNode.data.enable_checkpointing === "True",
       default_root_dir: trainerNode.data.default_root_dir,
     },
@@ -737,7 +902,12 @@ function exportNotebook() {
 function exportYaml() {
   try {
     const config = buildCLIConfig();
-    const yamlStr = jsyaml.dump(config);
+    let yamlStr = jsyaml.dump(config, { lineWidth: -1 });
+
+    // JS object keys are strictly strings. jsyaml will dump a key like "5" as '5':
+    // If we want it to be a real integer key in the python side (e.g. 5: 0),
+    // we use a regex to strip surrounding quotes if the key is purely digits.
+    yamlStr = yamlStr.replace(/^(\s*)['"](\d+)['"]:/gm, "$1$2:");
 
     const blob = new Blob([yamlStr], { type: "text/yaml" });
     const url = URL.createObjectURL(blob);

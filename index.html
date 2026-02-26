@@ -1,219 +1,421 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TerraFlow - GeoAI Fine-Tuning Graph</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <link rel="stylesheet" href="css/style.css">
-</head>
-<body>
-
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
     <!-- 1. Background Grid -->
     <div id="canvas-bg"></div>
 
     <!-- 2. Nodes Container -->
-    <div id="nodes-container" style="transform-origin: 0 0;">
-        <!-- SVG Layer for interactions -->
-        <svg id="connections-layer" width="100%" height="100%" style="overflow: visible; display: block; position: absolute; pointer-events: none;"></svg>
+    <div id="nodes-container" style="transform-origin: 0 0">
+      <!-- SVG Layer for interactions -->
+      <svg
+        id="connections-layer"
+        width="100%"
+        height="100%"
+        style="
+          overflow: visible;
+          display: block;
+          position: absolute;
+          pointer-events: none;
+        "
+      ></svg>
     </div>
 
     <!-- 3. Context Menu -->
     <div id="context-menu">
-        <div class="menu-category">Architecture</div>
-        <div class="menu-item" onclick="addNode('ModelFactory', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Model Factory
-        </div>
-        <div class="menu-item" onclick="addNode('ModelBackbone', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Model Backbone
-        </div>
-        <div class="menu-item" onclick="addNode('ModelDecoder', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Model Decoder
-        </div>
-        <div class="menu-item" onclick="addNode('ModelNeck', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Model Neck
-        </div>
-        <div class="menu-item" onclick="addNode('ModelHead', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Model Head
-        </div>
-        <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Custom Arch</div>
-        <div class="menu-item" onclick="addNode('CustomBackbone', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Custom Backbone
-        </div>
-        <div class="menu-item" onclick="addNode('CustomNeck', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Custom Neck
-        </div>
-        <div class="menu-item" onclick="addNode('CustomDecoder', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Custom Decoder
-        </div>
-        <div class="menu-item" onclick="addNode('CustomHead', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-500"></span> Custom Head
-        </div>
+      <div class="menu-category">Architecture</div>
+      <div
+        class="menu-item"
+        onclick="addNode('ModelFactory', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Model Factory
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('ModelBackbone', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Model Backbone
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('ModelDecoder', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Model Decoder
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('ModelNeck', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Model Neck
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('ModelHead', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Model Head
+      </div>
+      <div
+        class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1"
+      >
+        Custom Arch
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomBackbone', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Custom Backbone
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomNeck', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Custom Neck
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomDecoder', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Custom Decoder
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomHead', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-500"></span> Custom Head
+      </div>
 
-        <div class="menu-separator"></div>
-        <div class="menu-category">Task Configuration</div>
-        <div class="menu-item" onclick="addNode('SegmentationTask', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-orange-500"></span> Segmentation Task
-        </div>
-        <div class="menu-item" onclick="addNode('PixelwiseRegressionTask', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-orange-500"></span> Regression Task
-        </div>
-        <div class="menu-item" onclick="addNode('OptimizerConfig', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-amber-500"></span> Optimizer
-        </div>
-        <div class="menu-item" onclick="addNode('LRScheduler', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-amber-600"></span> LR Scheduler
-        </div>
-        <div class="menu-item" onclick="addNode('TiledInference', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-violet-700"></span> Tiled Inference
-        </div>
-        <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Custom Task</div>
-        <div class="menu-item" onclick="addNode('CustomTask', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-orange-500"></span> Custom Task
-        </div>
-        <div class="menu-item" onclick="addNode('CustomOptimizer', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-amber-500"></span> Custom Optimizer
-        </div>
-        <div class="menu-item" onclick="addNode('CustomLRScheduler', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-amber-600"></span> Custom Scheduler
-        </div>
+      <div class="menu-separator"></div>
+      <div class="menu-category">Task Configuration</div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode('SegmentationTask', contextMenuPos.x, contextMenuPos.y)
+        "
+      >
+        <span class="badge bg-orange-500"></span> Segmentation Task
+      </div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode('PixelwiseRegressionTask', contextMenuPos.x, contextMenuPos.y)
+        "
+      >
+        <span class="badge bg-orange-500"></span> Regression Task
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('OptimizerConfig', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-amber-500"></span> Optimizer
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('LRScheduler', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-amber-600"></span> LR Scheduler
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('TiledInference', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-violet-700"></span> Tiled Inference
+      </div>
+      <div
+        class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1"
+      >
+        Custom Task
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomTask', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-orange-500"></span> Custom Task
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomOptimizer', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-amber-500"></span> Custom Optimizer
+      </div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode('CustomLRScheduler', contextMenuPos.x, contextMenuPos.y)
+        "
+      >
+        <span class="badge bg-amber-600"></span> Custom Scheduler
+      </div>
 
-        <div class="menu-separator"></div>
-        <div class="menu-category">Data Pipeline</div>
-        <div class="menu-item" onclick="addNode('DataModule', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-emerald-500"></span> Data Module
-        </div>
-        <div class="menu-item" onclick="addNode('CustomDataModule', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-emerald-500"></span> Custom Data Module
-        </div>
-        <!-- Augmentation Sub-header style -->
-        <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Augmentation</div>
-        <div class="menu-item" onclick="addNode('AlbumentationsResize', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-cyan-500"></span> Resize
-        </div>
-        <div class="menu-item" onclick="addNode('AlbumentationsHorizontalFlip', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-cyan-500"></span> Horizontal Flip
-        </div>
-        <div class="menu-item" onclick="addNode('AlbumentationsVerticalFlip', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-cyan-500"></span> Vertical Flip
-        </div>
-        <div class="menu-item" onclick="addNode('ToTensorV2', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-cyan-500"></span> To Tensor
-        </div>
-        <div class="menu-item" onclick="addNode('CustomTransform', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-cyan-500"></span> Custom Transform
-        </div>
+      <div class="menu-separator"></div>
+      <div class="menu-category">Data Pipeline</div>
+      <div
+        class="menu-item"
+        onclick="addNode('DataModule', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-emerald-500"></span> Data Module
+      </div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode('CustomDataModule', contextMenuPos.x, contextMenuPos.y)
+        "
+      >
+        <span class="badge bg-emerald-500"></span> Custom Data Module
+      </div>
+      <!-- Augmentation Sub-header style -->
+      <div
+        class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1"
+      >
+        Augmentation
+      </div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode('AlbumentationsResize', contextMenuPos.x, contextMenuPos.y)
+        "
+      >
+        <span class="badge bg-cyan-500"></span> Resize
+      </div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode(
+            'AlbumentationsHorizontalFlip',
+            contextMenuPos.x,
+            contextMenuPos.y,
+          )
+        "
+      >
+        <span class="badge bg-cyan-500"></span> Horizontal Flip
+      </div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode(
+            'AlbumentationsVerticalFlip',
+            contextMenuPos.x,
+            contextMenuPos.y,
+          )
+        "
+      >
+        <span class="badge bg-cyan-500"></span> Vertical Flip
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('ToTensorV2', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-cyan-500"></span> To Tensor
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomTransform', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-cyan-500"></span> Custom Transform
+      </div>
 
-        <div class="menu-separator"></div>
-        <div class="menu-category">Trainer Engine</div>
-        <div class="menu-item" onclick="addNode('TrainerConfig', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-blue-500"></span> Lightning Trainer
-        </div>
-        <div class="menu-item" onclick="addNode('Logger', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-pink-500"></span> Logger
-        </div>
-        <div class="menu-item" onclick="addNode('CustomLogger', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-pink-500"></span> Custom Logger
-        </div>
-        <!-- Callbacks Sub-header -->
-        <div class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1">Callbacks</div>
-        <div class="menu-item" onclick="addNode('EarlyStopping', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-rose-500"></span> Early Stopping
-        </div>
-        <div class="menu-item" onclick="addNode('ModelCheckpoint', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-rose-500"></span> Model Checkpoint
-        </div>
-        <div class="menu-item" onclick="addNode('LearningRateMonitor', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-rose-500"></span> LR Monitor
-        </div>
-        <div class="menu-item" onclick="addNode('RichProgressBar', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-rose-500"></span> Rich Progress Bar
-        </div>
-        <div class="menu-item" onclick="addNode('CustomCallback', contextMenuPos.x, contextMenuPos.y)">
-            <span class="badge bg-rose-500"></span> Custom Callback
-        </div>
+      <div class="menu-separator"></div>
+      <div class="menu-category">Trainer Engine</div>
+      <div
+        class="menu-item"
+        onclick="addNode('TrainerConfig', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-blue-500"></span> Lightning Trainer
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('Logger', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-pink-500"></span> Logger
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomLogger', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-pink-500"></span> Custom Logger
+      </div>
+      <!-- Callbacks Sub-header -->
+      <div
+        class="px-3 py-1 text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-1"
+      >
+        Callbacks
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('EarlyStopping', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-rose-500"></span> Early Stopping
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('ModelCheckpoint', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-rose-500"></span> Model Checkpoint
+      </div>
+      <div
+        class="menu-item"
+        onclick="
+          addNode('LearningRateMonitor', contextMenuPos.x, contextMenuPos.y)
+        "
+      >
+        <span class="badge bg-rose-500"></span> LR Monitor
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('RichProgressBar', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-rose-500"></span> Rich Progress Bar
+      </div>
+      <div
+        class="menu-item"
+        onclick="addNode('CustomCallback', contextMenuPos.x, contextMenuPos.y)"
+      >
+        <span class="badge bg-rose-500"></span> Custom Callback
+      </div>
     </div>
 
     <!-- 4. Floating Overlay (Logo & Controls) -->
     <div class="floating-ui top-6 left-6 pointer-events-none">
-        <h1 class="text-3xl logo-text drop-shadow-lg mb-1 pointer-events-auto">TerraFlow</h1>
-        <p class="text-gray-500 text-xs font-medium pointer-events-auto">GeoAI Fine-Tuning Graph Composer</p>
+      <h1 class="text-3xl logo-text drop-shadow-lg mb-1 pointer-events-auto">
+        TerraFlow
+      </h1>
+      <p class="text-gray-500 text-xs font-medium pointer-events-auto">
+        GeoAI Fine-Tuning Graph Composer
+      </p>
     </div>
 
     <div class="floating-ui bottom-6 left-6 flex gap-2">
-        <button onclick="autoLayout()" class="bg-[#1e1e1e] hover:bg-[#252525] text-gray-300 px-3 py-2 rounded-lg border border-[#333] shadow-lg transition flex items-center gap-2" title="Auto Layout">
-            <i class="ph-bold ph-tree-structure"></i>
-            <span class="text-xs font-semibold">Relayout</span>
-        </button>
-        <button onclick="resetView()" class="bg-[#1e1e1e] hover:bg-[#252525] text-gray-300 p-2 rounded-lg border border-[#333] shadow-lg transition" title="Reset Camera">
-            <i class="ph-bold ph-arrows-out-cardinal"></i>
-        </button>
-        <button onclick="clearCanvas()" class="bg-[#1e1e1e] hover:bg-red-900/30 text-red-400 p-2 rounded-lg border border-[#333] shadow-lg transition" title="Clear Canvas">
-            <i class="ph-bold ph-trash"></i>
-        </button>
+      <button
+        onclick="autoLayout()"
+        class="bg-[#1e1e1e] hover:bg-[#252525] text-gray-300 px-3 py-2 rounded-lg border border-[#333] shadow-lg transition flex items-center gap-2"
+        title="Auto Layout"
+      >
+        <i class="ph-bold ph-tree-structure"></i>
+        <span class="text-xs font-semibold">Relayout</span>
+      </button>
+      <button
+        onclick="resetView()"
+        class="bg-[#1e1e1e] hover:bg-[#252525] text-gray-300 p-2 rounded-lg border border-[#333] shadow-lg transition"
+        title="Reset Camera"
+      >
+        <i class="ph-bold ph-arrows-out-cardinal"></i>
+      </button>
+      <button
+        onclick="clearCanvas()"
+        class="bg-[#1e1e1e] hover:bg-red-900/30 text-red-400 p-2 rounded-lg border border-[#333] shadow-lg transition"
+        title="Clear Canvas"
+      >
+        <i class="ph-bold ph-trash"></i>
+      </button>
     </div>
 
     <!-- 5. Global Settings Panel (Permanent Bottom-Right) -->
-    <div class="floating-ui bottom-6 right-6 w-64 bg-[#1e1e1e]/90 backdrop-blur border border-[#333] rounded-xl shadow-2xl p-4">
-        <h2 class="text-xs font-bold text-gray-500 uppercase flex items-center gap-2 mb-3">
-            <i class="ph-bold ph-sliders-horizontal"></i> Global Configuration
-        </h2>
-        
-        <div class="space-y-3">
-            <!-- Experiment Name -->
-            <div class="flex flex-col gap-1">
-                <label class="text-xs text-gray-400 font-medium uppercase tracking-wider">Experiment Name</label>
-                <input type="text" id="global-experiment-name" 
-                       class="w-full bg-[#121212] border border-[#333] rounded px-2 py-1 text-sm text-gray-200 font-mono focus:border-blue-500 outline-none transition" 
-                       value="my_experiment" 
-                       onchange="updateGlobalSetting('experiment_name', this.value)">
-            </div>
-            
-            <!-- Random Seed -->
-            <div class="flex items-center justify-between gap-2">
-                <label class="text-sm text-gray-300 font-medium">Random Seed</label>
-                <input type="number" id="global-seed" 
-                       class="w-24 bg-[#121212] border border-[#333] rounded px-2 py-1 text-sm text-right text-blue-400 font-mono focus:border-blue-500 outline-none transition" 
-                       value="42" 
-                       onchange="updateGlobalSetting('seed_everything', this.value)">
-            </div>
+    <div
+      class="floating-ui bottom-6 right-6 w-64 bg-[#1e1e1e]/90 backdrop-blur border border-[#333] rounded-xl shadow-2xl p-4"
+    >
+      <h2
+        class="text-xs font-bold text-gray-500 uppercase flex items-center gap-2 mb-3"
+      >
+        <i class="ph-bold ph-sliders-horizontal"></i> Global Configuration
+      </h2>
+
+      <div class="space-y-3">
+        <!-- Experiment Name -->
+        <div class="flex flex-col gap-1">
+          <label
+            class="text-xs text-gray-400 font-medium uppercase tracking-wider"
+            >Experiment Name</label
+          >
+          <input
+            type="text"
+            id="global-experiment-name"
+            class="w-full bg-[#121212] border border-[#333] rounded px-2 py-1 text-sm text-gray-200 font-mono focus:border-blue-500 outline-none transition"
+            value="my_experiment"
+            onchange="updateGlobalSetting('experiment_name', this.value)"
+          />
         </div>
+
+        <!-- Random Seed -->
+        <div class="flex items-center justify-between gap-2">
+          <label class="text-sm text-gray-300 font-medium">Random Seed</label>
+          <input
+            type="number"
+            id="global-seed"
+            class="w-24 bg-[#121212] border border-[#333] rounded px-2 py-1 text-sm text-right text-blue-400 font-mono focus:border-blue-500 outline-none transition"
+            value="42"
+            onchange="updateGlobalSetting('seed_everything', this.value)"
+          />
+        </div>
+      </div>
     </div>
 
     <!-- 5. Export Buttons & Import -->
     <div class="floating-ui top-4 right-4 flex gap-3">
-        <!-- Hidden Input -->
-        <input type="file" id="import-file" style="display:none" accept=".yaml,.yml" onchange="handleFileImport(this)">
-        
-        <button onclick="importYaml()" class="bg-[#1e1e1e] hover:bg-[#252525] text-white pl-4 pr-5 py-2 rounded-xl border border-[#333] shadow-xl flex items-center gap-3 transition group">
-            <div class="bg-emerald-600 group-hover:bg-emerald-500 rounded-lg p-1.5 transition">
-                <i class="ph-fill ph-upload-simple text-white"></i>
-            </div>
-            <div class="flex flex-col items-start leading-none">
-                <span class="text-[10px] text-gray-500 font-medium mb-0.5">RESTORE</span>
-                <span class="text-xs font-bold text-gray-200">Import YAML</span>
-            </div>
-        </button>
-        <button onclick="exportYaml()" class="bg-[#1e1e1e] hover:bg-[#252525] text-white pl-4 pr-5 py-2 rounded-xl border border-[#333] shadow-xl flex items-center gap-3 transition group">
-            <div class="bg-amber-600 group-hover:bg-amber-500 rounded-lg p-1.5 transition">
-                <i class="ph-fill ph-file-code text-white"></i>
-            </div>
-            <div class="flex flex-col items-start leading-none">
-                <span class="text-[10px] text-gray-500 font-medium mb-0.5">CLI / YAML</span>
-                <span class="text-xs font-bold text-gray-200">Export & Run</span>
-            </div>
-        </button>
-        <button onclick="exportNotebook()" class="bg-[#1e1e1e] hover:bg-[#252525] text-white pl-4 pr-5 py-2 rounded-xl border border-[#333] shadow-xl flex items-center gap-3 transition group">
-            <div class="bg-blue-600 group-hover:bg-blue-500 rounded-lg p-1.5 transition">
-                <i class="ph-fill ph-notebook text-white"></i>
-            </div>
-            <div class="flex flex-col items-start leading-none">
-                <span class="text-[10px] text-gray-500 font-medium mb-0.5">JUPYTER</span>
-                <span class="text-xs font-bold text-gray-200">Export Notebook</span>
-            </div>
-        </button>
+      <!-- Hidden Input -->
+      <input
+        type="file"
+        id="import-file"
+        style="display: none"
+        accept=".yaml,.yml"
+        onchange="handleFileImport(this)"
+      />
+
+      <button
+        onclick="importYaml()"
+        class="bg-[#1e1e1e] hover:bg-[#252525] text-white pl-4 pr-5 py-2 rounded-xl border border-[#333] shadow-xl flex items-center gap-3 transition group"
+      >
+        <div
+          class="bg-emerald-600 group-hover:bg-emerald-500 rounded-lg p-1.5 transition"
+        >
+          <i class="ph-fill ph-upload-simple text-white"></i>
+        </div>
+        <div class="flex flex-col items-start leading-none">
+          <span class="text-[10px] text-gray-500 font-medium mb-0.5"
+            >RESTORE</span
+          >
+          <span class="text-xs font-bold text-gray-200">Import YAML</span>
+        </div>
+      </button>
+      <button
+        onclick="exportYaml()"
+        class="bg-[#1e1e1e] hover:bg-[#252525] text-white pl-4 pr-5 py-2 rounded-xl border border-[#333] shadow-xl flex items-center gap-3 transition group"
+      >
+        <div
+          class="bg-amber-600 group-hover:bg-amber-500 rounded-lg p-1.5 transition"
+        >
+          <i class="ph-fill ph-file-code text-white"></i>
+        </div>
+        <div class="flex flex-col items-start leading-none">
+          <span class="text-[10px] text-gray-500 font-medium mb-0.5">YAML</span>
+          <span class="text-xs font-bold text-gray-200">Export YAML</span>
+        </div>
+      </button>
+      <button
+        onclick="exportNotebook()"
+        class="bg-[#1e1e1e] hover:bg-[#252525] text-white pl-4 pr-5 py-2 rounded-xl border border-[#333] shadow-xl flex items-center gap-3 transition group"
+      >
+        <div
+          class="bg-blue-600 group-hover:bg-blue-500 rounded-lg p-1.5 transition"
+        >
+          <i class="ph-fill ph-notebook text-white"></i>
+        </div>
+        <div class="flex flex-col items-start leading-none">
+          <span class="text-[10px] text-gray-500 font-medium mb-0.5"
+            >JUPYTER</span
+          >
+          <span class="text-xs font-bold text-gray-200">Export Notebook</span>
+        </div>
+      </button>
     </div>
 
     <!-- Scripts -->
@@ -224,6 +426,5 @@
     <script src="js/compiler.js"></script>
     <script src="js/importer.js"></script>
     <script src="js/app.js"></script>
-
-</body>
+  </body>
 </html>
